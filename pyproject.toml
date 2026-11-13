@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cognify-py"
+version = "1.2.0"
+description = "A cognitive AI mind in pure Python: reasoning, thinking, self-learning, emotions - plus deep learning, a transformer language model, vision, audio, embeddings, multilingual, tools, code, and media generation."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "CognifyPy Contributors" }]
+keywords = [
+    "ai", "cognitive-architecture", "agent", "reasoning", "emotions",
+    "reinforcement-learning", "embeddings", "multimodal", "chain-of-thought",
+    "deep-learning", "transformer", "language-model",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = []          # zero dependencies - pure standard library
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+include = ["cognify*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

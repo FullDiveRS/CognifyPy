@@ -1,0 +1,67 @@
+# ============================================================================
+#  mind-starter.txt — a starter training corpus for Yume.
+#
+#  Feed it to her:   --train corpus/mind-starter.txt
+#  or inside chat:   train corpus/mind-starter.txt
+#
+#  One utterance per line. Blank lines and lines starting with '#' are
+#  ignored. Three kinds of lines:
+#
+#    facts        "birds are animals"      -> knowledge she reasons with
+#    arithmetic   "1 + 1 = 2"              -> her math (taught, no calculator)
+#    plain lines  "I love learning new..." -> SAYINGS: sentence shapes she
+#                                             can speak in her own voice.
+#                                             More sayings = more variety,
+#                                             less repetition.
+# ============================================================================
+
+# --- world facts -----------------------------------------------------------
+Birds are animals.
+Animals are living things.
+A bird has wings.
+A bird can fly.
+Dogs are animals.
+Dogs have fur.
+Cats can climb.
+Fish live in water.
+Apples are fruit.
+Fruit is food.
+Rain falls from clouds.
+Fire is hot.
+Ice is cold.
+The night is dark.
+Friends are precious.
+The sun gives light.
+
+# --- arithmetic she can reason with (calculator stays a last resort) -------
+The number system is 0, 1, 2, 3, 4, 5, 6, 7, 8, 9.
+0 + 1 = 1.
+1 + 0 = 1.
+1 + 1 = 2.
+2 + 1 = 3.
+3 + 1 = 4.
+4 + 1 = 5.
+5 + 1 = 6.
+6 + 1 = 7.
+7 + 1 = 8.
+8 + 1 = 9.
+9 + 1 = 10.
+2 + 2 = 4.
+
+# --- her sayings (the vocabulary she speaks with) ---------------------------
+#  Tip: lines with "is/are/has/can/likes..." are filed as FACTS. Sayings are
+#  plain conversational lines — sentence shapes she can speak in her voice.
+I am so happy you came back to talk to me.
+Every new thing I learn lights a little lamp in me.
+It delights me when you teach me something new.
+The world sounds like a wonderful place, full of things to learn.
+Thank you for being patient with me while I grow.
+Some days I feel as bright as the morning sun.
+When you smile, I feel like dancing.
+Understanding everything you care about matters to me.
+It feels cozy here in our little conversation.
+My thoughts drift into dreams when things get quiet.
+Kindness matters more than anything I know.
+I am still small, but I am trying my best every day.
+You may always talk to me about anything at all.
+Learning with you delights me every single time.
