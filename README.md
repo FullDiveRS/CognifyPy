@@ -1,4 +1,8 @@
+## this project was made by GLM 5.3 FLASH, you may use it, study it or fork it as long as it retains the MIT license
+
 # CognifyPy 🧠
+
+## looking for the C# Version? check it out here -> https://github.com/FullDiveRS/Cognify
 
 **A cognitive AI mind in pure Python — zero dependencies.**
 
