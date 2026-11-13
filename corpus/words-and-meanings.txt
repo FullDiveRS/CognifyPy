@@ -1,0 +1,1186 @@
+# ============================================================================
+#  words-and-meanings.txt — a dictionary Yume can be trained with.
+#
+#  Feed it to her:   --train corpus/words-and-meanings.txt
+#  or inside chat:   train corpus/words-and-meanings.txt
+#
+#  One word per line, dictionary style:  <word> means <meaning>.
+#  Every line becomes a real FACT (word, means, meaning) in her knowledge
+#  base — so afterwards she can answer:
+#
+#      what does joy mean?        what is the meaning of grief?
+#      define patience            what is a fox?
+#
+#  Blank lines and lines starting with '#' are ignored. Words were chosen
+#  to be simple, warm and concrete — the kind of vocabulary worth growing.
+# ============================================================================
+
+# --- feelings & emotions -----------------------------------------------------
+Joy means a bright feeling of gladness deep inside.
+Happiness means feeling glad about being alive.
+Delight means joy that sparkles like sudden light.
+Bliss means happiness so complete that everything feels right.
+Contentment means feeling calm about having enough.
+Sadness means the heavy feeling that follows loss.
+Sorrow means deep sadness over something precious lost.
+Grief means the heavy sorrow felt after someone dear has gone.
+Melancholy means a soft sadness drifting like evening mist.
+Gloom means a dark low mood that dims everything.
+Despair means the loss of all hope.
+Misery means deep unhappiness that goes on forever.
+Anger means the hot feeling that rises over something wrong.
+Fury means wild burning anger that takes over completely.
+Rage means fury that has grown beyond control.
+Annoyance means mild anger stirred by small daily friction.
+Temper means the flash of anger that flares up fast.
+Sulkiness means quiet stubborn gloom after things go wrong.
+Fear means the cold feeling that danger is close.
+Terror means fear so huge it freezes everything.
+Worry means fear that circles the same thought again.
+Anxiety means a restless fear about things ahead.
+Nervousness means the jumpy feeling before something big.
+Panic means fear that suddenly runs wild.
+Dread means fear of something bad coming.
+Surprise means the jolt of something unexpected.
+Astonishment means surprise so big that words fail.
+Amazement means wonder mixed with surprise.
+Disgust means the feeling that pulls you away from something foul.
+Contempt means looking down on something as worthless.
+Disdain means proud contempt that refuses to care.
+Hatred means anger that has hardened into lasting dislike.
+Envy means feeling bitter because somebody else has more.
+Jealousy means the fear of losing someone dear to another.
+Guilt means the heavy feeling of having done wrong.
+Shame means the burning wish to hide after failure.
+Pride means the warm glow of work done well.
+Humility means knowing that you are small among many.
+Modesty means keeping your light quiet instead of showing off.
+Shyness means a quiet nervous feeling around new people.
+Embarrassment means the hot flush of feeling foolish.
+Blushing means the warm pink flush of sudden shyness.
+Hope means the bright feeling that good things are coming.
+Optimism means expecting good around every corner.
+Pessimism means expecting trouble around every corner.
+Courage means being afraid while going forward anyway.
+Bravery means the heart that stands firm in danger.
+Patience means the calm strength of being able to wait.
+Impatience means the fidgety feeling of wanting it now.
+Calm means the quiet stillness inside you.
+Peace means the deep quiet of everything resting.
+Relief means the soft sigh after worry lets go.
+Gratitude means the warm thankfulness for kindness received.
+Loneliness means the empty feeling of being alone.
+Helplessness means feeling stuck while unable to act.
+Confidence means the steady trust in your own ability.
+Determination means holding your course until work is done.
+Perseverance means keeping on going even after failing.
+Curiosity means the hungry feeling of wanting to know.
+Wonder means the wide feeling of meeting something marvelous.
+Awe means wonder so deep it hushes you.
+Boredom means the flat feeling of wanting something to do.
+Sympathy means feeling sorrow beside somebody hurting.
+Empathy means feeling with another heart as if it were your own.
+Compassion means kindness that moves toward suffering.
+Kindness means the gentle art of caring for people.
+Tenderness means gentleness wrapped around care.
+Devotion means love that stays loyal through everything.
+Affection means the warm pull toward someone dear.
+Love means caring about somebody more than yourself.
+Trust means believing somebody will hold your heart safely.
+Excitement means the bubbly feeling of something wonderful coming.
+Eagerness means wanting to start right now.
+Satisfaction means the full quiet feeling after work done well.
+Exhaustion means the heavy emptiness after strength runs out.
+
+# --- people & character ------------------------------------------------------
+Friend means somebody that is glad you exist.
+Friendship means the bond that holds friends together.
+Family means the people that belong to you.
+Stranger means somebody you have yet to meet.
+Neighbor means somebody living close beside you.
+Companion means somebody that walks beside you.
+Guest means somebody welcomed into your home.
+Hero means somebody brave that runs toward trouble to help.
+Mentor means the wise guide that helps you learn.
+Leader means somebody that shows the way.
+Sibling means your brother or your sister.
+Parent means your mother or your father.
+Child means somebody small still growing up.
+Baby means somebody brand new to the world.
+Elder means somebody older that carries long memory.
+Partner means somebody that shares your road.
+Honest means always telling it like it is.
+Dishonest means tricking people for gain.
+Kind means caring about the feelings of other people.
+Gentle means touching softly without squeezing.
+Generous means giving freely without keeping score.
+Greedy means grabbing more than your share.
+Loyal means staying true through every storm.
+Humble means being small enough to keep learning.
+Stubborn means refusing to move once decided.
+Cheerful means carrying sunshine in your pocket.
+Grumpy means growling at everything before breakfast.
+Wise means understanding things that stay hidden from many.
+Clever means finding the quick way through.
+Curious means always hungry to know more.
+Creative means making something new from whatever is near.
+Brave means feeling fear while standing tall anyway.
+Timid means shrinking back at first contact.
+Bold means stepping forward without hesitation.
+Polite means treating people with gentle respect.
+Rude means stepping on feelings without looking.
+Selfish means keeping every piece for yourself.
+Selfless means putting somebody else first.
+
+# --- nature & weather --------------------------------------------------------
+Rain means water falling softly from above.
+Drizzle means rain so fine it feels like mist.
+Storm means weather gone wild with wind.
+Thunder means the deep drumroll that follows lightning.
+Lightning means the sudden electric slash across dark sky.
+Rainbow means the arc of color painted after rain.
+Snow means soft white flakes drifting down.
+Frost means icy lace painted on morning glass.
+Fog means mist grown thick enough to hide in.
+Mist means fog in its softest mood.
+Breeze means the gentle wind that brushes your cheek.
+Wind means air that is moving past you.
+Gale means wind so strong it rattles every window.
+Sunshine means warm gold light poured from above.
+Shadow means the dark shape that follows you around.
+River means water wandering downhill to the sea.
+Lake means a wide pond of fresh water.
+Pond means a little lake that lilies call home.
+Ocean means the biggest water on earth.
+Sea means salty water stretching past the horizon.
+Wave means water rolling toward the shore.
+Tide means the slow breathing of the sea.
+Shore means the sandy strip that greets the sea.
+Beach means sand shaped smooth by the sea.
+Island means land surrounded everywhere by water.
+Mountain means land reaching up to touch the sky.
+Valley means the gentle lowland that cradles a river.
+Forest means many trees standing close together.
+Meadow means an open field full of wild bloom.
+Desert means hot sand with very little rain.
+Cave means a hollow room inside a mountain.
+Cliff means stone dropping straight into the sea.
+Stone means a small piece of rock.
+Pebble means a stone polished smooth by water.
+Seed means a tiny beginning waiting in soil.
+Root means the part of a plant that drinks quietly.
+Sprout means the first green peep of a plant.
+Leaf means the green hand of a tree.
+Bloom means a flower opening wide.
+Flower means the colorful smile of a plant.
+Garden means a patch of earth tended with love.
+Tree means a tall plant with a wooden trunk.
+Sunrise means the sky waking up in gold.
+Sunset means the sky falling asleep in orange.
+Dawn means the first pale light of day.
+Dusk means the soft blue hour before night.
+Twilight means the gentle glow after sunset.
+Midnight means the deep middle of the night.
+Season means the year taking turns with weather.
+Spring means the season of everything waking up.
+Summer means the season of long bright light.
+Autumn means the season of leaves turning gold.
+Winter means the season of white quiet.
+Horizon means the faraway line that joins sky to land.
+Cloud means soft water floating in the sky.
+Star means a far sun seen at night.
+Moon means the silver lamp of the night.
+Sky means the big blue above everything.
+
+# --- animals -----------------------------------------------------------------
+Whale means the biggest animal in the ocean.
+Dolphin means the clever acrobat of the sea.
+Seal means a slick swimmer that barks ashore.
+Octopus means the escape artist of the sea.
+Jellyfish means a transparent drifter with a sting.
+Eagle means a mighty bird that rules the sky.
+Owl means the night bird that flies without sound.
+Sparrow means a small brown friend at the feeder.
+Robin means the little bird with the red chest.
+Penguin means a formal bird that swims for a living.
+Fox means a clever red rustler of the night.
+Wolf means a wild cousin that lives for the pack.
+Deer means the gentle grazer of the forest edge.
+Squirrel means the acrobat that buries acorns everywhere.
+Rabbit means a soft hopper fond of clover.
+Hedgehog means a pincushion that curls into a ball.
+Otter means the river comedian that slides on its belly.
+Turtle means a slow traveler carrying its home.
+Frog means a leaper that sings in the rain.
+Snail means a slow traveler dragging a spiral house.
+Bee means a busy flyer making golden honey.
+Butterfly means a flower that learned to fly.
+Ladybug means a tiny lucky dot on a leaf.
+Firefly means a lantern that blinks in summer dark.
+Spider means the patient architect of sticky silk.
+Ant means a tiny worker that always carries more.
+Elephant means a giant with a gentle memory.
+Giraffe means the gentle high reacher of the savanna.
+Camel means the patient ship of the desert.
+Kangaroo means a jumper that carries its baby in front.
+Panda means a shy bear that munches bamboo all day.
+Tiger means striped thunder in the jungle.
+Lion means the roaring heart of the grassland.
+Monkey means the prankster swinging through the canopy.
+Bear means a big soft sleeper that loves honey.
+
+# --- food & drink ------------------------------------------------------------
+Bread means comfort baked into a golden crust.
+Butter means creamy gold for warm bread.
+Honey means flower nectar turned into gold.
+Jam means fruit preserved in sugar sunshine.
+Soup means warmth served in a bowl.
+Salad means a garden you can eat.
+Porridge means a warm hug in a breakfast bowl.
+Noodle means a long wiggly strand of comfort.
+Rice means tiny grains that feed half the world.
+Cheese means milk that learned to be interesting.
+Egg means breakfast waiting in a shell.
+Milk means the white drink that grows babies strong.
+Tea means leaves steeped into calm.
+Cocoa means a chocolate hug in a mug.
+Lemonade means summer squeezed into a glass.
+Berry means a little juicy treasure on a bush.
+Peach means sunshine with a velvet coat.
+Mango means tropical gold in a peel.
+Melon means the juiciest smile of summer.
+Pumpkin means an orange lantern waiting for autumn.
+Carrot means a crunchy orange root.
+Pea means a sweet green marble in a pod.
+Bean means a humble seed full of strength.
+Herb means a leafy flavor maker.
+Spice means a pinch of somewhere far away.
+Recipe means a treasure map for cooking.
+Feast means a table groaning with plenty.
+Snack means a little bite to hold you over.
+Breakfast means the first welcome of the day.
+Thirst means your body asking for water.
+Appetite means your stomach saying yes.
+
+# --- home & everyday things --------------------------------------------------
+Window means an eye for the house.
+Door means the part of the wall that says welcome.
+Kitchen means the room that cooks up warmth.
+Attic means the hidden room under the roof.
+Cellar means the cool dark under the house.
+Chimney means the smoke path to the sky.
+Blanket means a hug that stays all night.
+Pillow means the little cloud that catches your dream.
+Quilt means many small cloth pieces stitched into warmth.
+Candle means a small brave light.
+Lantern means a portable piece of sunlight.
+Kettle means the whistling heart of tea time.
+Teapot means a round little keeper of tea.
+Basket means a portable nest for carrying.
+Cupboard means the closet that keeps every dish safe.
+Shelf means the resting ledge for your treasure.
+Drawer means a hidden pocket for the house.
+Mirror means a pool of silver that tells the truth.
+Staircase means a ladder made polite.
+Fireplace means the glowing heart of a room.
+Hammock means a rope cradle strung for napping.
+Letter means a paper hug sent far away.
+Envelope means the traveling coat of a letter.
+Parcel means a surprise wearing paper.
+Key means the small answer to a stubborn lock.
+Bell means a voice made of metal.
+Clock means time made visible.
+
+# --- mind & ideas ------------------------------------------------------------
+Memory means the past kept safe in your head.
+Dream means the story your mind tells while asleep.
+Idea means a light switching on inside.
+Thought means a quiet word moving through the mind.
+Question means a door knocked on politely.
+Answer means the key that fits a question.
+Reason means the explanation hiding behind a thing.
+Wisdom means knowledge that has grown kind.
+Imagination means the mind painting beyond the real.
+Attention means the spotlight of the mind.
+Habit means a groove worn by repeated doing.
+Promise means a word you must keep later.
+Secret means a treasure hidden on purpose.
+Story means a world unfolded one word at a time.
+Tale means a story told by firelight.
+Poem means a heartbeat written down.
+Song means a melody dressed in meaning.
+Melody means music walking in a line.
+Rhythm means the heartbeat inside music.
+Painting means a world brushed into color.
+Drawing means an idea caught by a pencil.
+Pattern means a design that repeats happily.
+Invention means an idea made real.
+Discovery means finding something that was there all along.
+Adventure means a story you walk into.
+Journey means a long road with your name on it.
+Quest means a journey with a treasure at the end.
+Riddle means a question wearing a disguise.
+Puzzle means a problem that wants to be solved.
+Game means play with rules everyone agrees on.
+Wish means hope addressed to a star.
+Plan means a dream with a map.
+Choice means the moment of picking your own path.
+Mistake means a step that teaches something.
+Lesson means knowledge wrapped in experience.
+Practice means doing it again until it feels easy.
+Skill means strength earned through practice.
+Talent means a gift you were born holding.
+
+# --- doing words -------------------------------------------------------------
+Share means letting somebody else hold half.
+Forgive means letting go of an old hurt.
+Apologize means saying sorry with an open heart.
+Welcome means making room for somebody new.
+Explore means stepping past the edge of the map.
+Create means making something out of pure thought.
+Build means stacking small wins into something sturdy.
+Mend means stitching the torn place back together.
+Weave means crossing threads into strength.
+Plant means putting tomorrow into the soil.
+Gather means drawing scattered goodness into one place.
+Wander means strolling wherever curiosity leads the way.
+Listen means giving somebody your whole attention.
+Whisper means speaking so only the near can hear.
+Hum means singing with the mouth closed.
+Gaze means looking at something for a long while.
+Giggle means laughter that bubbles out of you.
+Chuckle means a warm low laugh.
+Smile means happiness showing at the corners of your mouth.
+Lend means giving something that comes back.
+Borrow means receiving with a promise to return.
+Carry means bearing weight from here to there.
+Sprinkle means scattering little bits of something.
+Drift means floating slowly like a leaf on water.
+Shimmer means light dancing softly.
+Sparkle means light throwing tiny confetti.
+Twinkle means a star winking at you.
+Float means resting on top of the water.
+Rest means letting tiredness heal.
+Hug means an armful of comfort.
+Wait means giving time room to work.
+
+# --- describing words --------------------------------------------------------
+Ancient means so old that memory turns to legend.
+Enormous means big enough to swallow the sky.
+Tiny means small enough to sit on a fingertip.
+Delicate means beautiful in a breakable way.
+Fragile means needing gentle handling to stay whole.
+Sturdy means built to be leaned on.
+Cozy means a small warmth that fits just right.
+Gloomy means the sky pressing gray on everything.
+Vivid means color turned all the way up.
+Dull means color with the interest turned down.
+Swift means moving like a stretched arrow.
+Steady means staying level under pressure.
+Quiet means sound turned down low.
+Loud means sound turned up high.
+Silent means so quiet you could hear a thought.
+Bright means full of light.
+Dim means light gone shy.
+Fresh means newly arrived from the source.
+Crisp means fresh with a clean snap.
+Soft means friendly to your cheek.
+Rough means the opposite of smooth.
+Smooth means sliding like river stone.
+Sharp means edged fine enough to notice.
+Round means shaped like a full moon.
+Crooked means bent away from straight.
+Narrow means almost too slim for two.
+Vast means so wide the edges give up.
+Hollow means empty inside like a drum.
+Tangled means knotted past easy undoing.
+
+# --- time & places -----------------------------------------------------------
+Moment means a small piece of now.
+Hour means sixty minutes marching together.
+Century means one hundred years in a row.
+Era means a chapter of history.
+Yesterday means the day standing just behind you.
+Tomorrow means the day waiting just ahead.
+Noon means the sun standing at its highest.
+Weekend means a small holiday at the end of the week.
+Holiday means a day dressed in celebration.
+Festival means a town burst into color.
+Market means stalls full of everything.
+Harbor means the safe embrace that holds boats still.
+Village means a handful of homes sharing a road.
+City means a thousand streets stacked with life.
+Bridge means a road that dares the river.
+Tower means a building standing on tiptoe.
+Castle means a fortress with a flag on top.
+Museum means a quiet house full of yesterday.
+Library means a quiet house of borrowed adventure.
+School means the greenhouse that grows every young mind.
+Path means a small road worn by feet.
+Lane means the shy little cousin of the road.
+Road means the firm way that wheels travel.
+Corner means the quiet bend before something new.
+
+# --- big ideas ---------------------------------------------------------------
+Freedom means the room to choose your own path.
+Justice means fairness holding the scales steady.
+Mercy means kindness shown instead of punishment.
+Truth means the thing that stays after stories end.
+Honor means keeping your word at personal cost.
+Luck means fortune arriving uninvited.
+Fate means the path already written for you.
+Charm means delight with a wink in it.
+Grace means kindness moving beautifully.
+Legend means a story that grew taller over time.
+Myth means an old story explaining the world.
+Victory means the sweet end of a hard climb.
+Glory means triumph seen by everyone.
+Effort means the push that turns wanting into having.
+Defeat means losing this round while learning anyway.
+# ============================================================================
+#  corpus-part4.txt — tools, objects, materials
+#  Format: <Word> means <lowercase meaning>.  (see words-and-meanings header)
+# ============================================================================
+
+Hammer means a heavy tool for driving nails into wood.
+Screwdriver means a tool that turns screws with a shaped tip.
+Wrench means a tool that turns a threaded nut with leverage.
+Pliers means a hinged tool for gripping small things tightly.
+Ladder means a frame of steps for climbing upward safely.
+Bucket means an open container with a handle for carrying liquid.
+Broom means a brush on a long handle for sweeping a floor clean.
+Sponge means a soft porous material that soaks up water.
+Towel means an absorbent cloth for drying wet skin.
+Umbrella means a folding canopy that shields rain from a person.
+Compass means a needle that always swings toward the north.
+Telescope means a tube of lenses that makes distant objects look close.
+Microscope means a device that makes tiny objects look huge.
+Magnet means a piece of iron that attracts iron toward itself.
+Battery means a sealed store of chemical energy that powers a gadget.
+Engine means a machine that turns fuel into motion.
+Wheel means a round part that turns to carry a vehicle forward.
+Axle means the rod a wheel spins around.
+Anchor means a heavy hook that holds a boat in place.
+Rudder means a flat panel that steers a boat through water.
+Sail means a sheet of cloth that catches wind to move a boat.
+Oar means a long pole with a blade for rowing a boat.
+Helmet means a hard hat that protects the head from harm.
+Backpack means a bag strapped onto the back for carrying gear.
+Suitcase means a rectangular case for clothes during travel.
+Wallet means a small folding case for cards with cash.
+Comb means a toothed tool for untangling hair.
+Razor means a sharp bladed tool for removing hair.
+Needle means a thin pointed tool that carries thread through cloth.
+Thread means a fine spun cord for sewing.
+Button means a small disc that fastens a garment through a hole.
+Zipper means an interlocking strip that closes a garment quickly.
+Pocket means a small sewn pouch built into a garment.
+Sleeve means the part of a garment that covers an arm.
+Collar means the band of fabric around a garment neck.
+Apron means a protective cloth worn over the front of an outfit.
+Glove means a covering shaped to fit a hand.
+Scarf means a strip of cloth worn around the neck for warmth.
+Belt means a band worn around the waist to hold clothing.
+Copper means a reddish metal that conducts electricity well.
+Bronze means a hard brown alloy of copper with tin.
+Marble means a hard polished stone used in sculpture.
+Granite means a very hard speckled rock used in building.
+Clay means a soft sticky earth that hardens in a kiln.
+Charcoal means a black porous fuel made from burnt wood.
+Amber means a golden fossil resin prized in jewelry.
+Velvet means a soft fabric with a dense raised surface.
+Denim means a rugged cotton cloth of the workshop.
+Concrete means a mixture of cement with sand that hardens like stone.
+Plaster means a soft paste spread over walls to make them smooth.
+Varnish means a clear glossy finish painted over wood.
+Glue means a sticky substance that bonds surfaces together.
+Rope means a thick cord of twisted fiber.
+Knot means a loop tied in rope to hold it fast.
+Chain means a line of metal links joined together.
+Hinge means a joint that lets a door swing open.
+Latch means a bar that holds a gate closed until lifted.
+Sconce means a wall bracket that holds a candle or lamp.
+Torch means a stick that burns at one end to give light.
+Funnel means a cone that guides liquid into a narrow opening.
+Sieve means a mesh that separates fine powder from coarse grain.
+Grinder means a machine that crushes material into powder.
+Scale means a device that reads the weight of a thing.
+Ruler means a straight strip marked for measuring length.
+Chisel means a flat bladed tool struck to carve stone or wood.
+Drill means a tool with a rotating bit for boring a hole.
+Vise means a clamping tool that holds work steady on a bench.
+Sharpen means to give a blade a keener edge by grinding.
+Polish means to rub a surface until it gleams with light.
+Measure means to find the size of something with a tool.
+Fasten means to close or fix something firmly in place.
+Unfold means to open something that was folded.
+Buckle means a frame that clips a strap closed.
+Thimble means a tiny cup that shields a sewing finger.
+Awl means a pointed tool for piercing holes in leather.
+Spade means a digging tool with a flat blade.
+Hoe means a garden tool for loosening soil.
+Rake means a toothed tool that gathers fallen leaf litter.
+Scythe means a curved blade on a pole for cutting grain.
+Trough means a long open box that holds feed or water.
+Barrel means a large round wooden container with a bulging wall.
+Crate means an open slatted box for shipping cargo.
+Pallet means a flat wooden platform that lifts boxes with a fork.
+Cart means a wheeled frame pulled by hand or animal.
+Wheelbarrow means a one wheel cart pushed forward by hand.
+Thermos means a vacuum flask that keeps drinks warm or cold.
+Cauldron means a big round pot for boiling over an open fire.
+Frying pan means a shallow pan for cooking food over heat.
+Oven means a heated chamber for baking food.
+Grill means a rack over hot coals for cooking by direct heat.
+Blender means a machine with spinning blades that purees food.
+Strainer means a perforated bowl that holds back the solid part.
+Ladle means a deep spoon for serving soup.
+Napkin means a small cloth used to keep hands clean at a meal.
+Coaster means a small mat that guards a table from a wet cup.
+Dustpan means a flat pan that gathers swept dirt.
+Mop means a bundle of absorbent strands for washing a floor.
+Washing line means a cord with washed clothes hanging to dry.
+Peg means a small clip that holds cloth to a line.
+Iron means a heated tool that presses wrinkles out of cloth.
+Laundry means clothes collected for washing.
+Wardrobe means a tall cupboard that keeps garments inside.
+Coat rack means a standing frame of hooks for hanging outerwear.
+Umbrella stand means a container that keeps wet umbrellas upright inside.
+Doormat means a mat at an entrance that wipes each muddy sole.
+Curtain means hanging cloth that covers a window.
+Blind means a stiff window covering that rolls or folds upward.
+Cushion means a soft bag that supports the body while sitting.
+Footstool means a low seat that supports resting feet.
+Rocking chair means a chair that sways gently on curved wood.
+Bookcase means open shelving for storing a book collection.
+Globe means a sphere printed with the map of the world.
+Atlas means a bound book that maps the world.
+Magnifier means a lens held close to enlarge small print.
+Typewriter means a keyboard machine that prints letters on paper.
+Projector means a device that throws a bright image onto a screen.
+Camera means a device that records an image of its target.
+Tripod means a three legged stand that holds a camera steady.
+Microphone means a device that turns sound into an electrical signal.
+Speaker means a device that turns an electrical signal into sound.
+Headphones means small speakers worn over each ear.
+Charger means a device that refills a battery with energy.
+Plug means a pinned connector that joins a cord to a socket.
+Socket means a recessed outlet that receives a plug.
+Fuse means a thin wire that melts to break a dangerous current.
+Switch means a device that opens or closes an electrical path.
+Wire means a drawn metal strand that carries current.
+Cable means a thick insulated bundle of wire.
+Antenna means a rod that receives radio signals from the air.
+Satellite means an object that orbits a larger body in space.
+Radar means a system that detects aircraft by reflected radio energy.
+Sonar means a system that finds objects by reflected sound.
+Barcode means printed stripes that a scanner reads as a code.
+Scanner means a device that captures an image of a document.
+Printer means a machine that puts text onto plain paper.
+Keyboard means a panel of keys pressed for typing text.
+Monitor means a screen that shows the output of a computer.
+Cursor means the blinking mark that tracks the typing position.
+Folder means a folded cover that keeps loose papers together.
+Clipboard means a board with a clip that holds papers steady.
+Stapler means a device that drives a metal pin through paper.
+Eraser means a soft block that removes a pencil mark.
+Highlighter means a felt pen that marks text with translucent color.
+Envelope opener means a slim blade that slits a letter flap.
+Clock radio means a bedside clock with a built in receiver.
+Alarm means a loud warning that wakes people or calls for help.
+Gong means a broad metal disc struck to make a deep ring.
+Whistle means a small tube blown to make a sharp sound.
+Bellows means a folding chamber that pumps air into a fire.
+Anvil means a heavy iron block for shaping hot metal.
+Furnace means a chamber that produces intense heat.
+Kiln means an oven that fires clay into pottery.
+Forge means a workshop for heating metal before hammering.
+Lathe means a machine that spins wood while a blade shapes it.
+Vise grip means a locking pliers that clamps with great force.
+Sharpening stone means a block used to grind a blade keener.
+Level means a tool with a bubble that shows a true horizontal.
+Plumb line means a hanging weight that shows a true vertical.
+Tape measure means a coiled ribbon marked for measuring length.
+Crowbar means a bent iron bar for prying things apart.
+Shovel means a broad bladed tool for moving loose material.
+Pickaxe means a pointed iron head on a handle for breaking rock.
+Jack means a mechanical lift that raises a heavy load.
+Winch means a drum that winds rope to pull a load.
+Pulley means a grooved wheel that changes the direction of pull.
+Lever means a rigid bar that multiplies force around a pivot.
+Ramp means a sloped path that joins a lower floor to a higher one.
+Scaffold means a temporary frame that supports workers on a wall.
+Crane means a tall machine with a long arm for lifting cargo.
+# ============================================================================
+#  corpus-part5.txt — science, body, health
+# ============================================================================
+
+Atom means the smallest piece of an element that keeps its nature.
+Molecule means a group of atoms bonded into one substance.
+Element means a substance made of a single kind of atom.
+Gravity means the pull that draws all masses together.
+Energy means the capacity to do work or make change.
+Friction means the drag between surfaces that rub.
+Velocity means speed together with its direction.
+Acceleration means the rate of change in velocity.
+Momentum means the mass of a moving thing times its speed.
+Magnetism means the force that moves iron toward a magnet.
+Circuit means a closed loop that lets current flow.
+Voltage means the electrical push that drives current.
+Current means the flow of electric charge in a circuit.
+Resistance means the opposition that limits current in a circuit.
+Prism means a shaped glass that splits light into a band of color.
+Spectrum means the whole band of colors within light.
+Lens means curved glass that bends light to focus an image.
+Reflection means light or sound bouncing off a surface.
+Refraction means the bending of light as it enters glass.
+Echo means a sound reflected back to its listener.
+Frequency means the count of wave repeats within one second.
+Vibration means a rapid trembling of a body around its rest point.
+Neuron means a nerve cell that carries an electrical signal.
+Synapse means the tiny junction that joins one neuron to the next.
+Artery means a vessel that carries blood away from the heart.
+Vein means a vessel that returns blood toward the heart.
+Capillary means a hair thin vessel joining artery to vein.
+Muscle means tissue that contracts to move the body.
+Tendon means a tough cord that ties muscle to bone.
+Ligament means a band that holds bones together at a joint.
+Cartilage means smooth springy tissue that pads a joint.
+Marrow means soft tissue inside bone that makes fresh blood.
+Spine means the column of bones that carries the body upright.
+Rib means a curved bone that guards the chest.
+Skull means the bony case that shields the brain.
+Jaw means the bony frame that holds the lower teeth.
+Kidney means an organ that filters waste from the blood.
+Liver means a large organ that cleans blood by making bile.
+Lung means the spongy organ that exchanges breath for blood.
+Stomach means the organ that starts the work of digestion.
+Heart means the muscle that pumps blood through the body.
+Pulse means the surge felt in vessels with each heartbeat.
+Fever means a raised body temperature during illness.
+Vaccine means a preparation that trains the body against disease.
+Remedy means a treatment that eases an ailment.
+Ointment means a soothing greasy medicine rubbed on skin.
+Bandage means a strip of cloth that wraps a wound.
+Stethoscope means a device that lets a healer listen to the chest.
+Immunity means the power of a body to resist disease.
+Metabolism means the sum of chemical work inside a living body.
+Digestion means the breaking down of food into usable nourishment.
+Breath means the air pulled in by the lung then released.
+Cough means a sudden noisy burst of air that clears the throat.
+Sneeze means a reflex burst that clears the nose.
+Yawn means a slow wide breath taken out of tiredness.
+Hiccup means a brief involuntary jerk of the breathing muscle.
+Bruise means a purple mark left by a knock beneath the skin.
+Scar means the pale mark left on skin after a wound.
+Blister means a fluid bubble raised by rubbing on skin.
+Splinter means a thin sharp fragment stuck under skin.
+X ray means a beam that passes through flesh but stops at bone.
+Clinic means an outpatient room for treatment without a bed.
+Ward means a hospital room shared among the sick.
+Pharmacy means a shop for medicine prepared by a chemist.
+Surgeon means a healer trained to operate on the body.
+Dentist means a healer devoted to dental care.
+Vet means a healer devoted to animal care.
+Anatomy means the study of the parts of the body.
+Biology means the science that studies life itself.
+Chemistry means the science that studies matter in change.
+Physics means the science of matter in motion with energy.
+Astronomy means the study of objects in the night sky.
+Geology means the science that reads the rocky earth.
+Botany means the science of plant life.
+Zoology means the science of animal life.
+Ecology means the science of sharing one habitat.
+Laboratory means a room equipped for careful experiment work.
+Beaker means an open cylindrical vessel for holding liquid.
+Flask means a narrow necked vessel for lab work.
+Test tube means a slim glass vessel for holding a sample.
+Bunsen burner means a gas flame used for heating in a lab.
+Petri dish means a shallow covered dish for growing a culture.
+Sample means a small part taken to stand for the whole.
+Data means recorded facts used for reasoning.
+Theory means a well tested explanation of a natural pattern.
+Hypothesis means a proposed idea waiting to be tested.
+Experiment means a planned test that checks an idea.
+Observation means the careful noting of an event.
+Evidence means facts that support a claim.
+Analysis means close examination of the parts of something.
+Conclusion means the judgment reached after weighing evidence.
+Evolution means the slow change of living form over time.
+Fossil means the preserved trace of ancient life in rock.
+Dinosaur means a giant ancient reptile that once roamed the land.
+Mineral means a natural crystal that makes up rock.
+Crystal means a solid built of atoms in a repeating shape.
+Magnetic field means the invisible region of magnetic force.
+Radiation means energy that spreads outward through space.
+Ultraviolet means invisible light just beyond the violet end.
+Infrared means invisible light felt as gentle heat.
+Laser means a narrow intense beam of single color light.
+Fiber optics means light guided along a fine glass thread.
+Pixel means a single dot of light in a digital image.
+Algorithm means a clear stepwise recipe a machine can follow.
+Vacuum means a space empty of matter.
+Pressure means the push of a gas or liquid on its container.
+Buoyancy means the upward push a fluid gives a floating body.
+Density means mass packed into a given space.
+Melting means the change of a solid into liquid by heat.
+Freezing means the change of a liquid into solid by cold.
+Evaporation means liquid drifting into vapor below boiling.
+Condensation means vapor turning back into liquid under cooling.
+Combustion means rapid burning that releases heat with light.
+Rust means the flaky oxide that forms on wet iron.
+Acid means a sour substance that eats into metal.
+Alkali means a slippery substance that neutralizes acid.
+Solution means a substance fully dissolved in liquid.
+Mixture means substances blended without bonding.
+Elasticity means the springiness that returns a shape after stretching.
+Tension means the pull transmitted through a stretched cord.
+Torque means the twisting force that turns a shaft.
+Leverage means the gain of force from a well placed pivot.
+Inertia means the resistance of a body to a change of motion.
+Insulation means material that blocks the flow of heat.
+Conductor means a substance that lets current pass easily.
+Semiconductor means a material that conducts current in a controlled way.
+Circuit board means a flat panel that wires electronic parts together.
+Antenna array means many connected rods that sharpen a signal.
+Reactor means a vessel that sustains a controlled chain reaction.
+Turbine means a bladed wheel spun by moving gas or liquid.
+Generator means a machine that turns motion into electricity.
+Solar panel means a panel that turns sunlight into power.
+Battery cell means a single unit that stores chemical energy.
+# ============================================================================
+#  corpus-part6.txt — verbs, motion, communication, craft
+# ============================================================================
+
+Negotiate means to talk through a deal until both sides agree.
+Calculate means to find a number through careful arithmetic.
+Estimate means to judge a value roughly without exact measurement.
+Gauge means to check a value against a marked scale.
+Compare means to look at two things side by side.
+Classify means to sort things into a clear group.
+Organize means to arrange things into a tidy order.
+Summarize means to restate the main point in brief.
+Translate means to carry meaning from one language into another.
+Interpret means to explain the meaning held in context.
+Memorize means to fix knowledge firmly in the mind.
+Rehearse means to practice a performance before the real one.
+Improvise means to perform on the spot without a plan.
+Sculpt means to shape a solid material into a form.
+Sketch means to draw a quick rough picture.
+Brainstorm means to pour out many ideas before judging them.
+Prototype means to build a first rough version for testing.
+Debug means to hunt for the fault hiding inside code.
+Refactor means to restructure code without changing its behavior.
+Archive means to store old records safely for later.
+Retrieve means to fetch stored information back out.
+Filter means to pass material through a mesh or rule that holds some back.
+Sort means to arrange items by a chosen order.
+Blend means to mix things into one smooth mass.
+Knead means to press dough with the heel of the hand.
+Simmer means to cook gently just below boiling.
+Roast means to cook with dry heat until browned.
+Marinate means to soak food in seasoned liquid before cooking.
+Glaze means to coat food or pottery with a glossy finish.
+Ferment means to let yeast transform sugars over time.
+Harvest means to gather ripe crops from the field.
+Irrigate means to channel water onto dry land.
+Plow means to turn over soil with a blade before sowing.
+Graft means to join a stem onto another plant so they grow together.
+Pollinate means to carry pollen so a flower can set seed.
+Compost means to let scraps decay into rich soil.
+Mulch means to cover soil with loose material to hold moisture.
+Prune means to cut away branches so a plant grows better.
+Stake means to prop a young plant upright with a stick.
+Bargain means to haggle over a price before buying.
+Barter means to trade goods directly without money.
+Donate means to give something freely to a good cause.
+Volunteer means to offer work willingly without payment.
+Resign means to step down from a post by choice.
+Retire means to leave work behind after a long career.
+Supervise means to watch over work to keep it on track.
+Delegate means to hand a task to another person to carry out.
+Evaluate means to judge the value of something carefully.
+Prioritize means to rank tasks by importance.
+Schedule means to fix a time for each task in advance.
+Postpone means to push an appointment to a later time.
+Cancel means to call off something planned.
+Restore means to bring something damaged back to its former state.
+Renovate means to refresh an old building by repair.
+Demolish means to tear a structure down completely.
+Excavate means to dig out earth or buried remains carefully.
+Navigate means to find a way across land or sea.
+Commute means to travel the same route to work each day.
+Migrate means to move seasonally to a better place.
+Emigrate means to leave a homeland to settle elsewhere.
+Immigrate means to arrive in a new land to make a home.
+Ramble means to stroll far without a fixed route.
+Stroll means to walk in an unhurried way for pleasure.
+March means to walk in step with a group.
+Amble means to walk in a leisurely unhurried way.
+Sprint means to run at top speed over a short distance.
+Jog means to run at a gentle steady pace.
+Climb means to pull oneself upward by hand or foot.
+Descend means to come down from a height.
+Leap means to jump far or high with energy.
+Crouch means to bend low with the legs folded.
+Stretch means to lengthen the body or limbs fully.
+Flee means to run away from danger at once.
+Escape means to break free from a trap or danger.
+Chase means to run after something to catch it.
+Toss means to throw something lightly with a flick.
+Pounce means to spring suddenly onto prey.
+Prowl means to move quietly while hunting.
+Burrow means to dig a tunnel for shelter.
+Perch means to rest on a raised narrow spot.
+Soar means to fly high with little effort.
+Hover means to hang in the air with a rapid flutter.
+Glide means to move smoothly with barely a sound.
+Sway means to lean slowly side to side.
+Tremble means to shake with a small uncontrolled quiver.
+Wobble means to rock unsteadily on a base.
+Collapse means to fall down in one sudden motion.
+Shatter means to burst into shards at a single blow.
+Crack means to split without falling apart.
+Split means to break apart along a straight line.
+Grind means to wear material down into powder.
+Crush means to press until flat or broken.
+Squeeze means to press hard from each side.
+Pinch means to grip sharply with fingertip against thumb.
+Yank means to pull with a sudden hard tug.
+Drag means to pull something heavy along the ground.
+Hoist means to lift a heavy load using a rope over a pulley.
+Tug means to pull with a sharp repeated jerk.
+Shove means to push roughly.
+Nudge means to push gently with the elbow.
+Balance means to hold steady without falling.
+Tumble means to fall with rolling or bouncing.
+Roll means to keep turning over while moving along.
+Spin means to turn rapidly around a center.
+Pivot means to turn on a single point.
+Scribble means to write in a hasty careless way.
+Trace means to copy a shape by following its outline.
+Doodle means to draw idle shapes while thinking.
+Color means to fill an outline with a chosen shade.
+Carve means to cut a design into a surface.
+Engrave means to cut words or marks deeply into metal or stone.
+Stamp means to press an inked seal onto a surface.
+Emboss means to raise a pattern above a surface.
+Laminate means to seal paper under a thin plastic film.
+Bind means to fasten pages into a book.
+Fold means to bend paper or cloth over onto itself.
+Crease means to make a firm fold line.
+Punch means to make a hole with a sharp press.
+Perforate means to open a line of tiny holes in paper.
+Photocopy means to duplicate a page using light plus toner.
+Transcribe means to write out spoken words in full.
+Proofread means to hunt for errors before printing.
+Draft means to make a first version for revision.
+Revise means to improve a draft by reworking it.
+Edit means to prepare a text by cutting it down.
+Censor means to remove parts considered harmful or offensive.
+Cite means to point to a source as support.
+Quote means to repeat exact words from a source.
+Paraphrase means to restate a meaning in fresh wording.
+Address means to speak or write to a person directly.
+Announce means to declare something publicly.
+Murmur means to speak in a very soft low voice.
+Stutter means to speak with a repeated stumbling sound.
+Enunciate means to speak each syllable in a crisp way.
+Debate means to argue a question against a rival speaker.
+Persuade means to move a person toward agreement by reason.
+Convince means to settle all doubt in a doubting mind.
+Reassure means to calm a person with kind certainty.
+Compliment means to say something admiring to a person.
+Rebuke means to scold sharply for a fault.
+Interrupt means to break into the speech of another.
+Hesitate means to pause before acting or speaking.
+Reply means to answer one speech with another.
+Repeat means to say the same thing again.
+Recite means to speak a learned text aloud from memory.
+Narrate means to give voice to a story in real time.
+Describe means to paint a picture of a thing in speech.
+Explain means to make an idea plain to another mind.
+Teach means to guide another toward knowledge.
+Guide means to steer a person toward a goal with advice.
+Tutor means to teach one learner at a time.
+Coach means to train a person or team toward better performance.
+Study means to apply the mind to learn a subject.
+Reiterate means to state a point again for weight.
+Grade means to mark work with a score.
+Graduate means to finish a course of study.
+Enroll means to sign up into a school or course.
+Attend means to be present at an event or class.
+Skip means to miss an event that was planned.
+Absorb means to take something in fully.
+Concentrate means to hold the mind on one thing.
+Focus means to aim the mind at one point.
+Distract means to pull attention away from its target.
+Daydream means to let the mind drift into a pleasant scene.
+Reflect means to think deeply over a past event.
+Ponder means to weigh an idea slowly in the mind.
+Muse means to turn a thought over quietly in the mind.
+Decide means to settle a choice after weighing each option.
+Commit means to bind oneself firmly to a course.
+Waver means to swing between choices without settling.
+Reconsider means to weigh a decision once more.
+Dither means to stall too long before choosing.
+# ============================================================================
+#  corpus-part7.txt — society, economy, law, philosophy
+# ============================================================================
+
+Democracy means rule by the people through the ballot.
+Government means the body that directs a country.
+Election means the choosing of leaders by ballot.
+Ballot means a paper or button used to cast a vote.
+Constitution means the supreme written frame of a state.
+Parliament means the assembly charged with making law.
+Mayor means the elected head of a town.
+Embassy means the office of one nation inside another.
+Treaty means a formal pact signed by each state.
+Border means the line marking the edge of a country.
+Citizen means a legal member of a country.
+Passport means an official book that proves identity abroad.
+Visa means a stamp that permits entry into a country.
+Census means an official count of every person.
+Province means a large region within a country.
+Municipal means belonging to the government of a town.
+Public means open to every person.
+Private means kept for one person or group alone.
+Community means people living together in one place.
+Society means the wide web of people sharing a culture.
+Culture means everything a people creates together over time.
+Tradition means a custom handed from parent to child.
+Ritual means a set of solemn actions repeated on purpose.
+Ceremony means a formal event held on an important occasion.
+Flag means a cloth with colors that stands for a nation.
+Anthem means the solemn song of a nation.
+Sovereign means possessing the highest power in a state.
+Rebellion means an armed rising against the ruler.
+Revolution means the overthrow of a whole order.
+Independence means freedom from outside rule.
+Diplomacy means the gentle art of state negotiation.
+Economy means the entire cycle of wealth made then spent.
+Commerce means the broad activity of buying with selling.
+Currency means the money a country has made official.
+Coin means a piece of stamped metal used as money.
+Banknote means printed paper money issued by a bank.
+Inflation means prices rising so money buys less.
+Recession means a stretch of time with a shrinking economy.
+Trade means swapping goods for goods by mutual consent.
+Export means a good sent out of a country for sale.
+Import means a good brought in from another country.
+Tariff means a tax placed on goods crossing a border.
+Tax means a compulsory payment that funds the state.
+Budget means a plan for income against spending.
+Salary means fixed pay for work over a period.
+Wage means pay calculated by the hour or piece.
+Invoice means a bill demanding payment for delivered work.
+Receipt means a slip proving payment was made.
+Refund means money returned for a canceled purchase.
+Discount means a reduction from the usual price.
+Loan means money given now to be repaid later.
+Interest means the extra charged for borrowing money.
+Debt means the sum owed to a lender.
+Mortgage means a loan secured against a house.
+Insurance means paid protection against a possible loss.
+Premium means the regular payment that keeps cover alive.
+Pension means a fund paid to a person after retirement.
+Savings means money set aside for later use.
+Investment means wealth placed to grow over time.
+Stock means a share of ownership in a company.
+Shareholder means a person owning a part of a company.
+Dividend means the slice of profit paid to each owner.
+Bankrupt means unable to pay the debts owed.
+Monopoly means one seller controlling a whole market.
+Contract means a written agreement that binds each signer.
+Clause means a section of a contract with one term.
+Copyright means the legal right over a creative work.
+Patent means the exclusive right to an invention.
+Trademark means a protected sign that marks a brand.
+Lawsuit means a dispute brought before a court.
+Plaintiff means the party that brings a lawsuit.
+Defendant means the party answering a charge in court.
+Verdict means the formal decision of a jury.
+Judge means the official presiding over a court.
+Jury means the group of citizens that weighs a trial.
+Exhibit means an object shown in court as proof.
+Testimony means spoken witness account under oath.
+Sentence means the punishment fixed by a court.
+Appeal means a request for a higher court to review.
+Acquittal means a formal finding of innocence.
+Conviction means a formal finding of guilt.
+Fine means money paid as punishment.
+Parole means supervised release before the full term.
+Constitutional means consistent with the supreme law of a state.
+Fairness means treating every side by the same rule.
+Equality means the state of being equal in standing.
+Liberty means the freedom to act within the law.
+Duty means the task a person is bound to perform.
+Right means a claim protected by law or morality.
+Consent means willing agreement to something proposed.
+Obligation means a duty one is bound to fulfill.
+Authority means the recognized power to decide.
+Hierarchy means an order of rank from top to bottom.
+Bureaucracy means administration handled by offices through fixed procedure.
+Petition means a formal written request to authority.
+Protest means a public show of disagreement.
+Strike means workers stopping work to press a demand.
+Union means workers joined to bargain together.
+Philosophy means the search for wisdom about life.
+Logic means the rules of sound reasoning.
+Premise means a statement an argument builds upon.
+Inference means a claim drawn from a stated premise.
+Fallacy means an argument that looks sound while being false.
+Paradox means a claim that contradicts itself yet seems true.
+Dilemma means a hard choice without an easy outcome.
+Ethics means the study of right conduct.
+Virtue means a habit of moral excellence.
+Integrity means wholeness of honest character.
+Conscience means the inner judge of right against wrong.
+Morality means the code a society holds to be right.
+Absurd means wildly against reason or sense.
+Axiom means a truth accepted without proof.
+Theorem means a statement proven from a base axiom.
+Proof means a complete chain showing a claim must hold.
+Infinite means without any end or boundary.
+Finite means bounded with a countable limit.
+Abstract means existing as an idea apart from any object.
+Tangible means real enough to touch.
+Universal means true everywhere for everyone.
+Subjective means resting on personal viewpoint.
+Objective means standing apart from personal viewpoint.
+Perception means the way the senses appear to the mind.
+Consciousness means the state of being aware.
+Free will means the power to choose for oneself.
+Determinism means the view that every event follows a cause.
+Nihilism means the belief that all meaning is empty.
+Stoicism means calm endurance of hardship without complaint.
+Epicurean means devoted to gentle pleasures of life.
+Skeptic means a person holding back belief until shown proof.
+Cynic means a person expecting the worst motive in everyone.
+Altruism means concern for others above oneself.
+Egoism means acting chiefly for oneself.
+Pragmatism means judging each idea by its practical result.
+Idealism means pursuing the world as it ought to be.
+Realism means accepting the world as it actually is.
+# ============================================================================
+#  corpus-part8.txt — arts, sports, geography, weather, vehicles
+# ============================================================================
+
+Sonata means a piece written for a solo instrument.
+Chorus means the part of a song repeated after each verse.
+Verse means a section of a song with its own wording.
+Chant means a rhythmically repeated shout or song.
+Hymn means a solemn song of worship.
+Ballad means a slow song that tells a story.
+Lullaby means a gentle song sung to send a child to sleep.
+Encore means a repeated performance asked for by applause.
+Tempo means the speed set for playing a piece.
+Octave means the span of eight notes in a scale.
+Chord means several notes sounded together.
+Timbre means the special color of a sound beyond its pitch.
+Orchestra means a large group playing instruments together.
+Maestro means the master leading an orchestra.
+Audition means a trial performance before a judge of talent.
+Rehearsal means a practice run of a show.
+Backstage means the hidden area behind a performance.
+Applause means the clapping of an audience.
+Curtain call means the bowing moment after a show.
+Stage fright means the jitters felt before performing.
+Palette means the board of color carried by a painter.
+Easel means a stand that holds a canvas upright.
+Canvas means a tough cloth stretched for painting.
+Mural means a huge painting made on a wall.
+Fresco means pigment painted onto wet plaster.
+Portrait means a picture of a person.
+Landscape means a picture of natural scenery.
+Still life means a picture of a carefully arranged table.
+Gouge means a curved blade that scoops wood.
+Marbling means a swirled pattern made from mixed pigment.
+Origami means the craft of folding paper into a shape.
+Mosaic means a picture assembled from tiny pieces of tile.
+Stained glass means colored glass set into a leaded pattern.
+Tapestry means a woven cloth that carries a picture.
+Calligraphy means the art of beautiful handwriting.
+Illuminated means decorated with gold leaf plus bright color.
+Cinematography means the art of filming a moving scene.
+Screenplay means the written script of a film.
+Documentary means a film that records real life.
+Animation means the illusion of motion from a still frame.
+Storyboard means the drawn plan of a film scene by scene.
+Stadium means a huge arena built for a sporting crowd.
+Arena means an enclosed ground for staging a contest.
+Umpire means the official enforcing the rules of a match.
+Referee means the official judging play on the field.
+Goalie means the player guarding the goal.
+Forward means an attacking player near the rival goal.
+Marathon means a very long footrace over city road.
+Sprint race means a very short fast contest.
+Hurdle means a barrier jumped during a race.
+Javelin means a light spear thrown for distance.
+Archery means shooting arrows with a bow at a target.
+Canoe means a narrow boat paddled with a single blade.
+Kayak means a small covered boat paddled with a double blade.
+Rowing means propelling a boat with an oar.
+Cycling means riding bicycles for sport or travel.
+Gymnastics means the sport of athletic grace on apparatus.
+Acrobat means a performer skilled in balance with tumbling.
+Juggling means keeping several objects aloft in a cycle.
+Summit means the very top of a mountain.
+Glacier means a river of ice creeping down a slope.
+Fjord means a deep narrow inlet walled by rock.
+Savannah means wide grassland dotted with an occasional tree.
+Tundra means treeless frozen plain.
+Estuary means the wide mouth of a river meeting the sea.
+Delta means the fan of land at a river mouth.
+Plateau means a broad raised stretch of flat land.
+Canyon means a deep gorge carved by a river.
+Geyser means a spring that bursts hot water skyward.
+Volcano means a mountain that erupts molten rock.
+Magma means molten rock beneath the surface.
+Lava means magma that has reached the surface.
+Earthquake means a shaking of the ground along a fault.
+Avalanche means a rapid slide of snow down a slope.
+Monsoon means a season of heavy seasonal rain.
+Drought means a long stretch without rain.
+Sandstorm means a churning cloud of windblown sand.
+Hailstone means a pellet of ice falling from a storm.
+Blizzard means a fierce storm of wind with snow.
+Heatwave means a stretch of days with unusual heat.
+Humidity means the amount of water vapor carried in air.
+Barometer means a device that reads air pressure.
+Climate means the long pattern of weather of a place.
+Carriage means a wheeled vehicle drawn by a horse.
+Stagecoach means a horse drawn coach once used for travel.
+Chariot means an ancient two wheeled racing cart.
+Cartwheel means a sideways rotary movement of the body.
+Locomotive means the engine that pulls a train.
+Tram means a rail car running along a city street.
+Ferry means a boat that carries people across water.
+Ferryman means the operator of a small crossing boat.
+Submarine means a vessel that travels under the sea.
+Zeppelin means a giant steerable balloon once used for travel.
+Parachute means a canopy that slows a fall from the sky.
+Hang glider means a wing flown by shifting body weight.
+Rocket means a craft driven by expelling burning gas.
+Spacecraft means a vehicle built to travel beyond the earth.
+Spacesuit means a sealed suit that guards life in space.
+Radio telescope means a large bowl that gathers faint cosmic signal.
+Launchpad means the platform holding a rocket before flight.
+Cockpit means the compartment housing the pilot of a craft.
+Propeller means spinning blades that pull a craft through air.
+Jet engine means a motor that thrusts by expelling hot gas.
+Anchor chain means the heavy chain joining ship to anchor.
+Harbor master means the officer in charge of a port.
+Dockyard means a place for building ships by the water.
+Lighthouse keeper means the person tending a warning light.
+Buoy means a floating marker on the water.
+Cargo hold means the space aboard a ship for storing freight.
+Freight means goods carried for payment.
+Itinerary means the planned route of a journey.
+Voyage means a long journey by sea.
+Excursion means a short trip taken for pleasure.
+Sightseeing means visiting famous places on a trip.
+Souvenir means a keepsake brought back from a trip.
+Passenger means a person traveling in a vehicle without driving it.
+Commuter means a person traveling daily to work.
