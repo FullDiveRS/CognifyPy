@@ -2,11 +2,9 @@
 
 # CognifyPy 🧠
 
-## looking for the C# Version? check it out here -> https://github.com/FullDiveRS/Cognify
-
 **A cognitive AI mind in pure Python — zero dependencies.**
 
-CognifyPy is the Python edition of the [Cognify](../Cognify) (C#) cognitive
+CognifyPy is the Python edition of the [Cognify](https://github.com/FullDiveRS/Cognify) (C#) cognitive
 architecture. It is a library for building agents that **reason, think,
 self-learn, and feel** — and that can also **see, hear, speak many languages,
 use tools, read and write code, and even generate media**.
