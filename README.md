@@ -1,3 +1,5 @@
+## this project was made by GLM 5.3 FLASH, you may use it, study it or fork it as long as it retains the MIT license
+
 # CognifyPy 🧠
 
 **A cognitive AI mind in pure Python — zero dependencies.**
