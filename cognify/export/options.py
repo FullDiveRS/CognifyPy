@@ -10,6 +10,12 @@ class ExportOptions:
     """Knobs for the export bundle (mirrors the C# ExportOptions)."""
     model_name: Optional[str] = None
     description: str = ""
+    # Llama.cpp GGUF export only: extend gpt2.context_length to this many
+    # tokens by linearly interpolating the trained position embeddings
+    # (pi-style). Must be >= the trained context (16 by default); None keeps
+    # the trained window. Positions past the trained range are interpolated,
+    # so expect gradually degraded coherence well beyond it.
+    llamacpp_context_length: Optional[int] = None
     vocab_size: int = 4096
     quantization_type: str = "Q4_K_M"
     context_length: int = 512

@@ -128,6 +128,21 @@ class LlamaCppGgufResult:
 
 _GPT2_PREFIX = "cognify.transformer."
 _TOKEN_NORMAL, _TOKEN_UNKNOWN, _TOKEN_CONTROL = 1, 2, 3
+
+def _chat_template(manifest_json: str, thinking_enabled: bool) -> str:
+    """Minimal Jinja chat template — llama.cpp's minja and Unsloth render it
+    when the file is served with --jinja: the capability manifest rides as a
+    Jinja `set` (no render output, extractable from /props), an optional
+    OpenAI-style tools block (rendered as JSON via tojson), then "role:
+    content" lines. Thinking minds honor Qwen3's ``enable_thinking`` kwarg
+    (sent as ``chat_template_kwargs`` by UIs): false drops the "thought:" cue."""
+    tail = ("{%- if enable_thinking is defined and not enable_thinking %}assistant:"
+            "{% else %}assistant: thought:{% endif %}" if thinking_enabled else "assistant:")
+    return ("{%- set cognify_manifest = '" + manifest_json + "' %}\n"
+            "{%- if tools %}tools: {{ tools | tojson }}\n"
+            "{% endif %}{% for m in messages %}{{ m['role'] }}: {{ m['content'] }}\n"
+            "{% endfor %}" + tail)
+
 _SPECIAL_TOKENS = ("<pad>", "<unk>", "<bos>", "<eos>")
 
 
@@ -182,27 +197,79 @@ def build_bpe_merges(pieces: List[str]) -> List[str]:
     return ranks
 
 
+def _resolve_output_file(path: str, default_name: str, extension: str) -> Path:
+    """Resolves an export target path. Export APIs write FILES (GGUF /
+    safetensors) — when ``path`` is an existing directory the file is written
+    inside it as ``<default_name><extension>``, because opening a directory for
+    writing would surface as IsADirectoryError / PermissionError ("access
+    denied"). Missing parent folders of the resolved path are created."""
+    full = Path(path).expanduser()
+    if full.is_dir():
+        full = full / (default_name + extension)
+    parent = full.parent if str(full.parent) else Path(".")
+    parent.mkdir(parents=True, exist_ok=True)
+    return full
+
+
+def _interpolate_positions(data, src_ctx: int, dst_ctx: int, dim: int) -> List[float]:
+    """Linear position interpolation (pi-style): resamples the trained
+    [src_ctx][dim] absolute position-embedding rows onto [dst_ctx][dim] —
+    new position i reads trained position i*(src-1)/(dst-1), so the trained
+    window stretches over the extended context and both end rows survive."""
+    out: List[float] = []
+    for i in range(dst_ctx):
+        s = i * (src_ctx - 1) / (dst_ctx - 1)
+        i0 = int(s)
+        i1 = min(i0 + 1, src_ctx - 1)
+        t = s - i0
+        b0, b1 = i0 * dim, i1 * dim
+        for d in range(dim):
+            out.append((1 - t) * data[b0 + d] + t * data[b1 + d])
+    return out
+
+
 def export_gguf_llama_cpp(mind: "Mind", path: str,
                           options: Optional[ExportOptions] = None) -> LlamaCppGgufResult:
     """Exports the mind's TRAINED neural language model as a
     llama.cpp-runnable ``gpt2``-architecture GGUF (see the module docstring).
-    Raises ``RuntimeError`` when the transformer has not been trained yet."""
+    Raises ``RuntimeError`` when the transformer has not been trained yet.
+    ``path`` is the ``.gguf`` FILE to write; an existing directory target
+    writes ``<name>-llamacpp.gguf`` inside it, and missing parent folders are
+    created. ``options.llamacpp_context_length`` optionally extends
+    ``gpt2.context_length`` by linearly interpolating the trained position
+    embeddings (must be >= the trained window)."""
     options = options or ExportOptions()
     neural = getattr(mind, "neural_language_model", None)
     if neural is None or not neural.is_trained:
         raise RuntimeError(
-            "the neural language model is not trained yet — run train_deep_model() "
-            "(or talk to the mind until it trains) before exporting for llama.cpp")
+            "the neural language model is not trained yet — call mind.train_deep_model(epochs) explicitly "
+            "before exporting for llama.cpp (train_file only feeds the training buffer; the automatic pass "
+            "fires by itself only after ~800 new tokens)")
 
     cfg = neural.cfg
     vocab = neural.export_vocab()
     by_name = {t.name: t for t in extract_transformer_tensors(mind)}
 
-    dim, layers, heads, context = cfg.dim, cfg.layers, cfg.heads, cfg.context_len
+    dim, layers, heads = cfg.dim, cfg.layers, cfg.heads
     wte = by_name[f"{_GPT2_PREFIX}wte"]
     wpe = by_name[f"{_GPT2_PREFIX}wpe"]
     vocab_size = wte.shape[0]
     ffn = by_name[f"{_GPT2_PREFIX}l0.ffn.w1"].shape[0]
+
+    # Context extension (opt-in): stretch the trained absolute position
+    # embeddings onto the requested window via linear interpolation (pi).
+    context = wpe.shape[0]
+    wpe_data, wpe_shape = wpe.data, wpe.shape
+    if options.llamacpp_context_length is not None \
+            and options.llamacpp_context_length != context:
+        wanted = options.llamacpp_context_length
+        if wanted < context:
+            raise ValueError(
+                f"llamacpp_context_length ({wanted}) cannot be below the "
+                f"trained context ({context})")
+        wpe_data = _interpolate_positions(wpe.data, context, wanted, dim)
+        wpe_shape = (wanted, dim)
+        context = wanted
 
     writer = GgufWriter()
     name = sanitize(options.model_name or mind.name)
@@ -247,6 +314,58 @@ def export_gguf_llama_cpp(mind: "Mind", path: str,
     writer.add_bool("tokenizer.ggml.add_bos_token", False)
     writer.add_bool("tokenizer.ggml.add_eos_token", False)
 
+    # Capability metadata — what the mind carries, tagged on the weights. The
+    # registered capability list IS the capability set (with_tools /
+    # with_capability / … attach them at build time); llama.cpp ignores
+    # unknown keys, but any harness reading the file can see what the mind
+    # carries. tokenizer.chat_template (in the block below) is the one key
+    # llama.cpp actually honors at request time.
+    cap_names = [c.name for c in mind.capabilities]
+    caps = set(cap_names)
+    capabilities = {
+        "code": "code" in caps,
+        "audio": "audio" in caps,
+        "vision": "vision" in caps,
+        "embeddings": "embeddings" in caps,
+        "multilingual": "multilingual" in caps,
+        "media_generation": "media_generation" in caps,
+        "tools": "tool_use" in caps,
+        # Reasoning / memory / emotions are built into the CognifyPy core
+        # (always present, not pluggable capabilities).
+        "reasoning": mind.engine is not None,
+        "memory": mind.kb is not None,
+        "emotions": mind.emotions is not None,
+        "web_search": bool(mind.allow_web_search),
+        "web_fetch": bool(mind.auto_fetch_web),
+    }
+    tool_names = mind.tools.names() if mind.tools else []
+    manifest = {
+        "version": 1,
+        "description": getattr(mind, "description", "") or "",
+        "thinking": {
+            "enabled": bool(mind.thinking_options.enabled),
+            "level": ThinkingLevel.parse(mind.thinking_options.level).value,
+            "ceiling": ThinkingCeiling.parse(mind.thinking_options.ceiling).value,
+        },
+        "capabilities": capabilities,
+        "tools": {"enabled": capabilities["tools"],
+                  "count": len(tool_names), "names": tool_names},
+    }
+    writer.add_string_array("cognify.modules", cap_names)
+    for cap, on in capabilities.items():
+        writer.add_bool(f"cognify.{cap}.enabled", on)
+    if tool_names:
+        writer.add_uint32("cognify.tools.count", len(tool_names))
+        writer.add_string_array("cognify.tools.names", tool_names)
+    # The manifest also rides inside the chat template as a Jinja `set`
+    # (renders no output): llama-server exposes the template via GET /props,
+    # so any client — cognify-chat.html, an agent harness, Unsloth-style UIs —
+    # can read what this mind carries and gray out what is missing. Single
+    # source of truth with the KV keys above.
+    writer.add_string("tokenizer.chat_template", _chat_template(
+        json.dumps(manifest).replace("'", "\\u0027"),
+        bool(mind.thinking_options.enabled)))
+
     # Identity metadata — travels with the runnable weights.
     writer.add_bool("cognify.thinking.enabled", bool(mind.thinking_options.enabled))
     writer.add_string("cognify.thinking.level", ThinkingLevel.parse(mind.thinking_options.level).value)
@@ -254,7 +373,7 @@ def export_gguf_llama_cpp(mind: "Mind", path: str,
     writer.add_uint32("cognify.cycles", mind.cycle_count)
 
     writer.add_tensor(TensorSpec("token_embd.weight", wte.data, *wte.shape))
-    writer.add_tensor(TensorSpec("position_embd.weight", wpe.data, *wpe.shape))
+    writer.add_tensor(TensorSpec("position_embd.weight", wpe_data, *wpe_shape))
     for l in range(layers):
         p = f"{_GPT2_PREFIX}l{l}."
         writer.add_tensor(TensorSpec(f"blk.{l}.attn_norm.weight", by_name[f"{p}ln1.g"].data, dim))
@@ -280,9 +399,7 @@ def export_gguf_llama_cpp(mind: "Mind", path: str,
     writer.add_tensor(TensorSpec("output_norm.weight", by_name[f"{_GPT2_PREFIX}lnf.g"].data, dim))
     writer.add_tensor(TensorSpec("output_norm.bias", by_name[f"{_GPT2_PREFIX}lnf.b"].data, dim))
 
-    full = Path(path).expanduser()
-    directory = full.parent if str(full.parent) else Path(".")
-    directory.mkdir(parents=True, exist_ok=True)
+    full = _resolve_output_file(path, sanitize(options.model_name or mind.name) + "-llamacpp", ".gguf")
     writer.write(str(full))
 
     # ---- post-write self-verification ---------------------------------------
@@ -373,11 +490,12 @@ class MindExporter:
                     options: Optional[ExportOptions] = None) -> None:
         """Exports the mind as a GGUF v3 file. The written file is re-read and
         verified (spec structure, alignment, data in range) before this method
-        returns — a corrupt export fails here, not inside gguf tooling later."""
+        returns — a corrupt export fails here, not inside gguf tooling later.
+        ``path`` is the ``.gguf`` FILE to write; an existing directory target
+        writes ``<name>.gguf`` inside it, and missing parent folders are
+        created."""
         options = options or ExportOptions()
-        full = Path(path).expanduser()
-        if str(full.parent):
-            full.parent.mkdir(parents=True, exist_ok=True)
+        full = _resolve_output_file(path, sanitize(options.model_name or mind.name), ".gguf")
         build_gguf(mind, options).write(str(full))
         report = diagnose_gguf(str(full))
         if not report.spec_valid:
@@ -390,7 +508,9 @@ class MindExporter:
                               options: Optional[ExportOptions] = None) -> LlamaCppGgufResult:
         """Exports the trained transformer as a llama.cpp-runnable
         ``gpt2``-architecture GGUF — the file to hand to llama.cpp, Unsloth or
-        llama-cpp-python. Raises ``RuntimeError`` when untrained."""
+        llama-cpp-python. Raises ``RuntimeError`` when untrained. An existing
+        directory target writes ``<name>-llamacpp.gguf`` inside it, and missing
+        parent folders are created."""
         return export_gguf_llama_cpp(mind, path, options)
 
     @staticmethod
@@ -413,6 +533,11 @@ class MindExporter:
 
         For backwards compatibility, an ``ExportOptions`` may still be passed
         positionally in the third slot.
+
+        ``path`` is the ``.safetensors`` FILE (or, when sharded, the shard base
+        name); an existing directory target writes ``<name>.safetensors``
+        inside it (shards follow the same base name), and missing parent
+        folders are created.
         """
         if isinstance(split_amount, ExportOptions):        # legacy positional
             split_amount, options = 1, split_amount
@@ -428,9 +553,8 @@ class MindExporter:
                 "cannot split a mind with no tensors into shards — build the mind "
                 "with with_learning() so it has trained weights to export")
 
-        full = Path(path).expanduser()
+        full = _resolve_output_file(path, sanitize(options.model_name or mind.name), ".safetensors")
         directory = full.parent if str(full.parent) else Path(".")
-        directory.mkdir(parents=True, exist_ok=True)
 
         base = full.name
         if base.lower().endswith(".safetensors"):

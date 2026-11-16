@@ -1,11 +1,17 @@
 """Tests for the transformer language model, the hybrid blend and the
 mind-level wiring (persistence included)."""
+import math
+
 import pytest
 
 from cognify.core.mind import Mind
 from cognify.learning.hybrid_next_token import fluency, predict_next
 from cognify.learning.next_token import NextTokenModel
-from cognify.learning.transformer import TransformerConfig, TransformerLM
+from cognify.learning.transformer import (
+    TransformerConfig,
+    TransformerLM,
+    TransformerTrainOptions,
+)
 from cognify.persistence.store import SqliteMindStore
 
 # Deliberately repetitive: the model MUST learn these transitions.
@@ -181,3 +187,44 @@ class TestMindWiring:
         after = restored.neural_language_model.predict_next("the cat", 3)
         assert [p.token for p in before] == [p.token for p in after]
         store.close()
+
+
+def _observed() -> TransformerLM:
+    lm = TransformerLM(tiny_config())
+    for line in CORPUS:
+        lm.observe(line)
+    return lm
+
+
+def test_train_loop_reports_per_epoch_loss_and_progress():
+    lm = _observed()
+    seen = []
+    report = lm.train(TransformerTrainOptions(
+        epochs=6, progress=lambda e, total, loss: seen.append((e, loss))))
+
+    assert len(report.per_epoch_losses) == 6
+    assert report.learning_rates == [tiny_config().learning_rate] * 6  # no decay
+    assert len(seen) == 6 and seen[-1][0] == 6
+    assert abs(seen[-1][1] - report.final_loss) < 1e-9
+    assert report.initial_loss > report.final_loss          # training reduces loss
+    assert not report.stopped_early
+    assert all(loss == loss and abs(loss) < math.inf for loss in report.per_epoch_losses)
+
+
+def test_train_loop_decays_learning_rate():
+    lm = _observed()
+    report = lm.train(TransformerTrainOptions(epochs=4, learning_rate=0.01, decay=0.5))
+    assert report.learning_rates == pytest.approx([0.01, 0.005, 0.0025, 0.00125])
+
+
+def test_train_loop_stops_early_when_loss_stalls():
+    lm = _observed()
+    seen = []
+    report = lm.train(TransformerTrainOptions(
+        epochs=20, min_delta=10.0, patience=2,
+        progress=lambda e, total, loss: seen.append(e)))
+
+    assert report.stopped_early
+    assert report.epochs == 3                                # 1 progress epoch + 2 stagnant
+    assert len(report.per_epoch_losses) == 3
+    assert len(seen) == 3
