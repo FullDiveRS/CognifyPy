@@ -21,7 +21,7 @@ from ..learning.hybrid_next_token import predict_next as _hybrid_predict
 from ..learning.learner import LearningModule
 from ..learning.next_token import NextTokenModel, TokenPrediction
 from ..learning.self_improvement import SelfImprovement, SelfImprovementReport
-from ..learning.transformer import TransformerLM, TransformerTrainingReport
+from ..learning.transformer import TransformerLM, TransformerTrainOptions, TransformerTrainingReport
 from ..memory.memory import AssociativeMemory
 from ..reasoning.facts import Fact, FactParser
 from ..reasoning.inference import InferenceEngine
@@ -912,9 +912,12 @@ class Mind:
         reads like the language the mind has absorbed (both models)."""
         return _hybrid_fluency(self.language_model, self.neural_language_model, text)
 
-    def train_deep_model(self, epochs: int = 8) -> "TransformerTrainingReport":
+    def train_deep_model(self, epochs: "int | TransformerTrainOptions | None" = None) -> "TransformerTrainingReport":
         """Explicitly deep-trains the neural (transformer) language model on
-        everything observed so far — the deep pass, with a full report."""
+        everything observed so far — the deep pass, with a full report. Pass a
+        :class:`TransformerTrainOptions` for full loop control: per-run
+        learning rate with per-epoch decay, early stopping on stalled loss,
+        a progress callback per epoch, and per-epoch losses in the report."""
         return self.neural_language_model.train(epochs)
 
     def stats(self) -> Dict[str, Any]:

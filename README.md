@@ -1,10 +1,10 @@
-## this project was made by GLM 5.3 FLASH, you may use it, study it or fork it as long as it retains the MIT license
-
 # CognifyPy 🧠
 
 **A cognitive AI mind in pure Python — zero dependencies.**
 
-CognifyPy is the Python edition of the [Cognify](https://github.com/FullDiveRS/Cognify) (C#) cognitive
+> **Full documentation:** [`docs/DOCUMENTATION.md`](docs/DOCUMENTATION.md) — the complete reference (builder API, capabilities, the training loop, GGUF export, serving, troubleshooting).
+
+CognifyPy is the Python edition of the [Cognify](../Cognify) (C#) cognitive
 architecture. It is a library for building agents that **reason, think,
 self-learn, and feel** — and that can also **see, hear, speak many languages,
 use tools, read and write code, and even generate media**.
@@ -208,7 +208,7 @@ MindExporter.export_bundle(mind, "export/yume")
 # val_data.txt, config.json, README.md
 ```
 
-Individual exports: `MindExporter.export_gguf(mind, "yume.gguf")` (archive), `MindExporter.export_gguf_llama_cpp(mind, "yume-llamacpp.gguf")` (**runnable gpt2 GGUF**), `.export_safetensors(...)`, `.export_tokenizer(mind, "tokenizer/")`.
+Individual exports: `MindExporter.export_gguf(mind, "yume.gguf")` (archive), `MindExporter.export_gguf_llama_cpp(mind, "yume-llamacpp.gguf")` (**runnable gpt2 GGUF**), `.export_safetensors(...)`, `.export_tokenizer(mind, "tokenizer/")`. Export APIs take a **file** path; an **existing directory** target writes the file inside it named after the mind (`<dir>/yume.gguf`, `<dir>/yume-llamacpp.gguf`, `<dir>/yume.safetensors`), and missing parent folders are created — no more raw `IsADirectoryError` / `PermissionError` from pointing the exporter at a folder. The runnable GGUF needs a **trained** transformer: `train_file` / conversation only feed the training buffer, and the automatic pass fires by itself only after ~800 new buffered tokens — for scripted or small corpora call `mind.train_deep_model()` explicitly before exporting.
 
 **The llama.cpp-runnable GGUF** — `export_gguf_llama_cpp` (also written by `export_bundle` when the transformer is trained, and by the demo's `/export` command) maps the neural language model onto the **stock `gpt2` architecture**, so llama.cpp / llama-cpp-python / Unsloth can load it, tokenize with the bundled word-level tokenizer and generate:
 
@@ -226,6 +226,14 @@ python -m cognify.export.diagnostics model.gguf
 ```
 
 `diagnose_gguf(path)` (in `cognify.export.diagnostics`) parses any GGUF v2/v3 — including files written by other tools — and reports which tensor quantization types it actually contains against llama.cpp's ggml type table (F32 … MXFP4, NVFP4, …), so the failure is explained before you hit it.
+
+**Context and the "Total x / 16" readout** — the GGUF's `gpt2.context_length` equals the trained window (`TransformerConfig.context_len`, default 16 — the learned absolute position embeddings bake it into the weights). `ExportOptions(llamacpp_context_length=128)` stretches it: the trained rows are resampled onto a 128-token window by linear position interpolation (pi-style) — Unsloth / llama.cpp then shows /128 and `llama-server -c 128` works. Positions past the trained range are interpolated, so coherence degrades the further you push. The per-completion length is a request-time knob, not a weight: `n_predict` on the llama.cpp command line, `max_tokens` in the OpenAI-compatible API / Unsloth's max-tokens field.
+
+**Capability metadata + chat template** — every builder switch now travels in the file twice. First as `cognify.*` KV metadata: `cognify.modules` (the registered capability-name array), one `cognify.<capability>.enabled` boolean per known capability (audio, code, tool_use, vision, embeddings, multilingual, media_generation, plus the core reasoning / memory / emotions and the web switches), `cognify.tools.count` / `cognify.tools.names`, and the `cognify.thinking.*` keys. Second as a **JSON manifest embedded in `tokenizer.chat_template` itself** — a Jinja `{%- set cognify_manifest = '…' %}` that renders no output; llama-server exposes the template via `GET /props`, so any client can extract it and gray out what the mind lacks. The template also honors Qwen3's **`enable_thinking`** kwarg: UIs send `chat_template_kwargs: {"enable_thinking": false}` and the assistant cue drops the `thought:` prefix (thinking minds end on `assistant: thought:`; minds built with `with_thinking(False)` carry no cue at all). `cognify-chat.html` (in this repo's download set) is a ready-made client: point it at `llama-server --jinja` and it lights a chip per enabled capability, grays out disabled modules, and shows a Unsloth-style "Thinking · <level>" selector with options above the mind's ceiling locked. Still true: the template formats prompts; it does not give the model new abilities.
+
+**What the GGUF cannot carry** — a GGUF is frozen transformer weights and llama.cpp is a bare inference runtime: the modules behind `with_audio()`, `with_code()`, `with_tools()`, web search, the thinking loop and memory **execute only in the CognifyPy runtime** — no metadata can give llama.cpp audio input, code execution or tool running (the `cognify.*` keys document what the mind carries; the chat template only formats prompts). Facts can be baked into the weights by training on them (`train_file`); everything else needs the CognifyPy runtime — or an agent harness (tool calling) wrapped around any llama.cpp server.
+
+**Training loop** — `train_deep_model` also accepts a `TransformerTrainOptions` for full loop control: `epochs`, a per-run `learning_rate` override with per-epoch `decay`, `min_delta` + `patience` early stopping when the loss stalls, and a `progress` callback fired after every epoch; the report adds `per_epoch_losses`, `learning_rates` and `stopped_early` (the plain `train_deep_model(8)` call is unchanged). How to train a mind to talk: the demo corpus is a dictionary (`Word means …`) with **zero** occurrences of "hello" — a mind trained only on it answers greetings with dictionary word salad ("things gear more welcome gear pressure it"), because a word-level model can only recombine the words its corpus contained ("gear" and "pressure" are corpus words; "hello" never was). Fix the corpus, not the trainer: feed conversational lines (`greeting-corpus.txt` ships with this repo's download set) and deep-train with the loop — `TransformerTrainOptions(epochs=40, decay=0.95, patience=4, min_delta=1e-4)` — after which "hello" yields "Talking starts when you say hello". The same rule applies to a served GGUF: its raw transformer speaks alone, so corpus quality is reply quality.
 
 **Sharded safetensors checkpoints** — split the weights with the standard Hugging Face checkpoint naming (`model-00001-of-00062.safetensors`):
 

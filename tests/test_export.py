@@ -9,7 +9,8 @@ from cognify import MindBuilder
 from cognify.export import ExportOptions, MindExporter
 from cognify.export.diagnostics import diagnose_gguf
 from cognify.export.exporter import (byte_encode, build_bpe_merges,
-                                     export_gguf_llama_cpp)
+                                     export_gguf_llama_cpp,
+                                     extract_transformer_tensors)
 from cognify.export.gguf import InvalidGgufError, read_gguf
 
 
@@ -100,6 +101,23 @@ class TestGguf:
         gguf = read_gguf(str(path))
         assert len(gguf.tensors) == 0
 
+    def test_directory_target_writes_default_file_inside(self, tmp_path):
+        mind = make_trained_mind()
+        target = tmp_path / "export-folder"
+        target.mkdir()
+        MindExporter.export_gguf(mind, str(target))   # a DIRECTORY, not a .gguf path
+
+        expected = target / "yume.gguf"
+        assert expected.exists()
+        gguf = read_gguf(str(expected))
+        assert gguf.metadata["general.name"] == "yume"
+
+    def test_creates_missing_parent_folders(self, tmp_path):
+        mind = make_trained_mind()
+        path = tmp_path / "does" / "not" / "exist" / "yet.gguf"
+        MindExporter.export_gguf(mind, str(path))
+        assert path.exists()
+
 
 class TestSafetensors:
     def test_header_and_contiguity(self, tmp_path):
@@ -143,6 +161,13 @@ class TestSafetensors:
         assert len(vals) == net.n_out
         for got, want in zip(vals, net.b2):
             assert got == pytest.approx(want, abs=1e-6)
+
+    def test_directory_target_writes_default_file_inside(self, tmp_path):
+        mind = make_trained_mind()
+        target = tmp_path / "st-folder"
+        target.mkdir()
+        MindExporter.export_safetensors(mind, str(target))
+        assert (target / "yume.safetensors").exists()
 
 
 class TestTokenizer:
@@ -256,8 +281,138 @@ class TestLlamaCppGguf:
     def test_requires_trained_model(self, tmp_path):
         mind = MindBuilder("Fresh").only("thinking", "memory").build()
         mind.process("hello there")
-        with pytest.raises(RuntimeError):
+        with pytest.raises(RuntimeError) as exc:
             export_gguf_llama_cpp(mind, str(tmp_path / "x.gguf"))
+        assert "train_deep_model" in str(exc.value)   # the fix it actually needs
+
+    def test_small_corpus_needs_explicit_train_deep_model(self, tmp_path):
+        mind = MindBuilder("Tiny").only("thinking", "memory").build()
+        corpus = tmp_path / "tiny.txt"
+        corpus.write_text("Fino is friendly.\nFino likes code.\nThe sky is blue.\n",
+                          encoding="utf-8")
+
+        mind.train_file(str(corpus))   # feeds facts + the training buffer…
+        assert not mind.neural_language_model.is_trained   # far below the auto-train threshold
+
+        mind.train_deep_model(1)       # …the explicit deep pass is what trains the transformer
+        assert mind.neural_language_model.is_trained
+
+    def test_llamacpp_writes_capability_metadata_and_chat_template(self, tmp_path):
+        mind = MindBuilder("Teko").only("thinking", "memory").with_tools().build()
+        corpus = tmp_path / "teko.txt"
+        corpus.write_text("Teko is friendly.\nTeko likes code.\nThe sky is blue.\n",
+                          encoding="utf-8")
+        mind.train_file(str(corpus))       # feed the buffer — the deep pass needs tokens
+        report = mind.train_deep_model(epochs=1)
+        assert report.epochs >= 1
+        path = tmp_path / "caps.gguf"
+        export_gguf_llama_cpp(mind, str(path))
+
+        gguf = read_gguf(str(path))
+
+        # The registered capability list IS the capability set.
+        cap_names = [c.name for c in mind.capabilities]
+        assert gguf.metadata["cognify.modules"] == cap_names
+        assert gguf.metadata["cognify.tools.enabled"]              # with_tools() above
+        assert gguf.metadata["cognify.reasoning.enabled"]          # core built-ins
+        assert gguf.metadata["cognify.memory.enabled"]
+        assert not gguf.metadata["cognify.audio.enabled"]          # never attached
+        assert gguf.metadata["cognify.web_search.enabled"] == bool(mind.allow_web_search)
+
+        names = mind.tools.names()
+        assert gguf.metadata["cognify.tools.count"] == len(names)
+        assert gguf.metadata["cognify.tools.names"] == sorted(names)
+        assert "calculator" in gguf.metadata["cognify.tools.names"]     # builtin set
+
+        # llama.cpp's minja renders the template; verify with jinja2 (+ the
+        # tojson filter minja provides but jinja2 core does not).
+        template = gguf.metadata["tokenizer.chat_template"]
+        assert "assistant:" in template
+        jinja2 = pytest.importorskip("jinja2")
+        env = jinja2.Environment()
+        env.filters["tojson"] = lambda v: json.dumps(v)
+        rendered = env.from_string(template).render(
+            messages=[{"role": "user", "content": "hello"}])
+        assert rendered.strip().endswith("assistant: thought:")   # thinking cue by default
+        plain = env.from_string(template).render(
+            messages=[{"role": "user", "content": "hi"}], enable_thinking=False)
+        assert plain.strip().endswith("assistant:")               # Qwen3-style kwarg drops it
+        with_tools = env.from_string(template).render(
+            tools=[{"function": {"name": "search_web"}}],
+            messages=[{"role": "system", "content": "be nice"},
+                      {"role": "user", "content": "hi"}])
+        assert "tools:" in with_tools and "search_web" in with_tools
+        assert "system: be nice" in with_tools
+
+        # The manifest rides inside the template and agrees with the KV keys.
+        manifest = json.loads(
+            template.split("cognify_manifest = '")[1].split("' %}")[0].replace("\\u0027", "'"))
+        assert manifest["capabilities"]["audio"] is False
+        assert manifest["capabilities"]["tools"] is True
+        assert manifest["tools"]["names"] == sorted(names)
+        assert manifest["thinking"]["level"] == gguf.metadata["cognify.thinking.level"]
+
+    def test_llamacpp_chat_template_reflects_thinking_switch(self, tmp_path):
+        mind = MindBuilder("Mute").only("memory").with_thinking(False).build()
+        corpus = tmp_path / "mute.txt"
+        corpus.write_text("Mute is quiet.\nMute likes code.\nThe sky is blue.\n",
+                          encoding="utf-8")
+        mind.train_file(str(corpus))
+        mind.train_deep_model(epochs=1)
+        path = tmp_path / "mute.gguf"
+        export_gguf_llama_cpp(mind, str(path))
+
+        gguf = read_gguf(str(path))
+        assert not gguf.metadata["cognify.thinking.enabled"]
+        template = gguf.metadata["tokenizer.chat_template"]
+        assert "thought:" not in template                  # no cue — this mind cannot think
+        assert template.endswith("assistant:")
+        assert "cognify_manifest" in template
+
+    def test_llamacpp_context_extension_by_position_interpolation(self, tmp_path):
+        mind = self.make_mind_with_trained_transformer()
+        neural = mind.neural_language_model
+        trained_ctx = neural.cfg.context_len
+        dim = neural.cfg.dim
+        path = tmp_path / "extended.gguf"
+
+        result = export_gguf_llama_cpp(
+            mind, str(path), ExportOptions(llamacpp_context_length=64))
+
+        assert result.context_length == 64
+        gguf = read_gguf(str(path))
+        assert gguf.metadata["gpt2.context_length"] == 64
+        assert gguf.tensor("position_embd.weight").shape == (64, dim)
+        wpe = gguf.read_tensor("position_embd.weight")
+        assert len(wpe) == 64 * dim
+
+        # pi interpolation: new position i reads trained position
+        # i*(C-1)/63 — the first row is untouched and the last new row
+        # equals the last trained row.
+        trained_wpe = next(t for t in extract_transformer_tensors(mind)
+                           if t.name == "cognify.transformer.wpe")
+        for d in range(dim):
+            assert wpe[d] == trained_wpe.data[d]
+            assert wpe[63 * dim + d] == trained_wpe.data[(trained_ctx - 1) * dim + d]
+
+    def test_llamacpp_rejects_context_below_the_trained_window(self, tmp_path):
+        mind = self.make_mind_with_trained_transformer()
+        trained_ctx = mind.neural_language_model.cfg.context_len
+        with pytest.raises(ValueError, match="trained context"):
+            export_gguf_llama_cpp(
+                mind, str(tmp_path / "shrink.gguf"),
+                ExportOptions(llamacpp_context_length=trained_ctx - 1))
+
+    def test_directory_target_writes_default_file_inside(self, tmp_path):
+        mind = self.make_mind_with_trained_transformer()
+        target = tmp_path / "llamacpp-folder"
+        target.mkdir()
+
+        result = export_gguf_llama_cpp(mind, str(target))
+
+        expected = target / "yume-llamacpp.gguf"
+        assert expected.exists()
+        assert result.path == str(expected)
 
     def test_gpt2_architecture_kvs_and_tensor_set(self, tmp_path):
         mind = self.make_mind_with_trained_transformer()

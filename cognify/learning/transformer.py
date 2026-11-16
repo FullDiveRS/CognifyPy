@@ -19,7 +19,7 @@ import random
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ..util import tokenize as _util_tokenize
 from .adam import AdamOptimizer
@@ -79,6 +79,28 @@ class TransformerTrainingReport:
     parameters: int
     vocabulary: int
     duration: float  # seconds
+    # --- training-loop extras (defaults keep positional callers working) ---
+    learning_rates: List[float] = field(default_factory=list)
+    per_epoch_losses: List[float] = field(default_factory=list)
+    stopped_early: bool = False
+
+
+@dataclass
+class TransformerTrainOptions:
+    """How one deep-training run should go — the knobs of the training loop:
+    how many epochs, the learning rate (with per-epoch decay), when to stop
+    early, and who to tell about each epoch's loss.
+
+    ``model.train(TransformerTrainOptions(epochs=40, decay=0.95, patience=4,
+    min_delta=1e-4, progress=lambda e, total, loss: print(e, loss)))``
+    """
+
+    epochs: int = 8
+    learning_rate: Optional[float] = None   # None keeps the config's rate
+    decay: float = 1.0                      # lr *= decay after each epoch
+    min_delta: float = 0.0                  # progress = loss improves by this (nats/token)
+    patience: int = 0                       # stagnant epochs before early stop (0 = off)
+    progress: Optional[Callable[[int, int, float], None]] = None  # (epoch, planned, loss)
 
     def __str__(self) -> str:  # pragma: no cover
         return (f"{self.epochs} epoch(s) on {self.windows} window(s): "
@@ -282,10 +304,15 @@ class TransformerLM:
             return None
         return self.train(AUTO_TRAIN_EPOCHS)
 
-    def train(self, epochs: int = 8) -> TransformerTrainingReport:
-        """Trains on everything in the observation buffer; returns the report."""
+    def train(self, epochs: "int | TransformerTrainOptions | None" = None) -> TransformerTrainingReport:
+        """Trains on everything in the observation buffer; returns the report.
+
+        Pass an :class:`TransformerTrainOptions` for full loop control — a
+        per-run learning rate with per-epoch decay, early stopping on stalled
+        loss, and a progress callback fired after every epoch."""
         start = time.time()
-        epochs = max(1, epochs)
+        opts = (epochs if isinstance(epochs, TransformerTrainOptions)
+                else TransformerTrainOptions(epochs=max(1, epochs) if epochs is not None else 8))
         self._tokens_since_train = 0
 
         total_tokens = sum(len(self._tokenize(s)) for s in self._buffer)
@@ -319,26 +346,54 @@ class TransformerLM:
         initial_loss = math.nan
         final_loss = math.nan
 
-        for _ in range(epochs):
+        # The training loop: each epoch shuffles the windows, runs Adam
+        # batches at the run's learning rate, reports the epoch loss to the
+        # progress callback, then decays the rate. patience + min_delta stop
+        # the run early when the loss stops improving.
+        lr = opts.learning_rate if opts.learning_rate is not None else self.cfg.learning_rate
+        learning_rates: List[float] = []
+        per_epoch: List[float] = []
+        best = math.inf
+        stagnant = 0
+        ran = 0
+        stopped_early = False
+
+        for _ in range(max(1, opts.epochs)):
             rng.shuffle(order)
             loss_sum, loss_n = 0.0, 0
             for start_i in range(0, epoch_window_count, self.cfg.batch_size):
                 idx = order[start_i:start_i + self.cfg.batch_size]
-                loss = self._train_batch([xs[i] for i in idx], [ys[i] for i in idx])
+                loss = self._train_batch([xs[i] for i in idx], [ys[i] for i in idx], lr)
                 if math.isnan(initial_loss):
                     initial_loss = loss
                 loss_sum += loss * len(idx)
                 loss_n += len(idx)
             final_loss = loss_sum / max(1, loss_n)
             self._last_loss = final_loss
+            per_epoch.append(final_loss)
+            learning_rates.append(lr)
+            ran += 1
+            if opts.progress is not None:
+                opts.progress(ran, max(1, opts.epochs), final_loss)
 
-        self._epochs_trained += epochs
-        return TransformerTrainingReport(epochs, epoch_window_count,
-                                         initial_loss if not math.isnan(initial_loss) else final_loss,
-                                         final_loss, self.n_params, len(self._vocab),
-                                         time.time() - start)
+            if final_loss < best - opts.min_delta:
+                best = final_loss
+                stagnant = 0
+            elif opts.patience > 0:
+                stagnant += 1
+                if stagnant >= opts.patience and ran < max(1, opts.epochs):
+                    stopped_early = True
+                    break
+            lr *= opts.decay
 
-    def _train_batch(self, xs: List[List[int]], ys: List[List[int]]) -> float:
+        self._epochs_trained += ran
+        return TransformerTrainingReport(
+            ran, epoch_window_count,
+            initial_loss if not math.isnan(initial_loss) else final_loss,
+            final_loss, self.n_params, len(self._vocab), time.time() - start,
+            learning_rates, per_epoch, stopped_early)
+
+    def _train_batch(self, xs: List[List[int]], ys: List[List[int]], lr: float) -> float:
         grads = self._new_grads()
         loss_sum = 0.0
         for x, y in zip(xs, ys):
@@ -362,7 +417,7 @@ class TransformerLM:
                 loss_sum += loss_row
             self._backward(cache, y, d_logits, grads)
         batch = len(xs)
-        self._apply_grads(grads, batch)
+        self._apply_grads(grads, batch, lr)
         return loss_sum / t / batch
 
     # ------------------------------------------------------------------ forward
@@ -706,7 +761,7 @@ class TransformerLM:
                        for c in range(d)])
         return dx
 
-    def _apply_grads(self, g: Dict[str, Any], batch: int) -> None:
+    def _apply_grads(self, g: Dict[str, Any], batch: int, lr: float) -> None:
         inv = 1.0 / batch
 
         def scale_mat(m: List[List[float]]) -> None:
@@ -774,7 +829,6 @@ class TransformerLM:
                 for key in ("ln1g", "ln1b", "bq", "bk", "bv", "bo", "ln2g", "ln2b", "bf1", "bf2"):
                     mul_vec(gb[key])
 
-        lr = self.cfg.learning_rate
         self._adam.step("wte", self._wte, g["wte"], lr)
         self._adam.step("wpe", self._wpe, g["wpe"], lr)
         self._adam.step_vec("lnf.g", self._lnfg, g["lnfg"], lr)
