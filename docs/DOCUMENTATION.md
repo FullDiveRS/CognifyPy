@@ -167,8 +167,9 @@ Python builders additionally offer `with_preset(...)`, `with_random_personality(
 | Method | Attaches / does |
 |---|---|
 | `Create(name)` / `Describe(text)` | name + self-description (used by identity answers) |
-| `WithReasoning(cfg?)` | knowledge base + inference engine |
-| `WithThinking(cfg?, enabled: true, ceiling: ThinkingCeiling.Only5)` | chain of thought + thought generator (level, tone, budget, ceiling) |
+| `WithReasoning(cfg?, enabled: true, ceiling: ReasoningCeiling.Only5)` | knowledge base + inference engine (level, depth, trace budget, ceiling — its own `ReasoningLevel` ladder, rung for rung identical to thinking) |
+| `WithThinking(cfg?, enabled: true, ceiling: ThinkingCeiling.Only5)` | chain of thought + thought generator (level, tone, budget, per-level budget ladder, automatic, ceiling) |
+| `WithCognitiveLevel(level, ceiling: ThinkingCeiling.Only5)` | ONE effort level for both modules: sets the thinking level AND the reasoning level, each only when that module is enabled in this builder |
 | `WithExpression(cfg)` | what the mind *shows* in chat (Feelings/FollowUps/Thinking/Meta switches) |
 | `WithConversational(cfg?)` | talkativeness `rate` and how much it collects (`understand`) |
 | `WithSelfLearning(cfg?)` | hybrid learning engine (MicroNet + style net + Q-table) |
@@ -243,6 +244,7 @@ Perception, action and knowledge access:
 | `mind.EmotionalState` / `mind.Feeling.CurrentStatus` | `emotional_state` / `feeling.current_status` | emotions |
 | `mind.GenerateMedia(prompt, type)` | `generate_media(prompt, kind)` | media generation |
 | `mind.PredictNext(ctx, n)` / `mind.ScoreFluency(text)` | `predict_next` / `score_fluency` | next-token |
+| `mind.ApplyChatTemplate(messages, template?, tools?, addGenerationPrompt?, extraVariables?)` | `mind.apply_chat_template(messages, template?, tools?, add_generation_prompt?, **kwargs)` | render a llama.cpp-compatible Jinja chat template (§9) |
 | `mind.TrainDeepModel(epochs \| options)` | `train_deep_model(epochs \| options)` | deep training loop (§6.2) |
 | `mind.NeuralLanguageModel` / `mind.Learning` / `mind.Lexicon` / `mind.Phrases` | `neural_language_model` / `learning` / `lexicon` / `phrases` | learning internals |
 | `mind.SaveAsync()` / `mind.LoadFromAsync(path)` / `MindBuilder.Restore(path)` | `save(path)` / `Mind.from_dict(...)` | persistence (§7) |
@@ -258,6 +260,8 @@ Perception, action and knowledge access:
 ### 5.1 Reasoning — logic and knowledge
 A symbolic knowledge base of `Fact`s (subject-predicate-object) and variable-carrying `LogicRule`s with three inference modes: **deduction** (forward chaining / modus ponens), **induction** (co-observed concepts become `related-to` facts), **abduction** (best rule + antecedents explaining an observation). Facts are also learned from ordinary sentences every cycle, and are stored and spoken in natural words — teach "Before is the affect before the cause" and "what is before?" yields *"Before is affect before cause."*, never a hyphenated slug. Letter-skeleton comparison makes spaced forms and legacy slugs compare equal; leading fillers ("so what is X?") are skipped before question matching.
 
+**Reasoning levels + trace budget, lined up with thinking** — reasoning has its OWN ladder: `ReasoningLevel` (`Low` … `Max`) with `ReasoningCeiling` (`Only1` … `Only5`), enums that mirror the thinking ones rung for rung (cross-map with `level.FromThinking()` / `level.ToThinking()`; Python: `ReasoningLevel.from_thinking(...)` / `.to_thinking()`, `ReasoningCeiling.from_thinking(...)`), and the same default budgets (50/100/200/300/400). The level sizes two things: the forward-chaining depth — `Low` 2, `Medium` 6 (the historical default), `High` 8, `VeryHigh` 10, `Max` 12 passes — and the reasoning TRACE budget, the tokens of arithmetic / inference / learning explanations one cycle may spend (`TokensFor(level)` / `tokens_for(level)`; a global `Budget(n)` overrides the ladder, per-rung `Budget(ReasoningLevel.High, 260)` sets one rung, `Depth(n)` pins an explicit depth the ladder stops retuning). One call sets the effort of both modules: `.WithReasoning().WithThinking().WithCognitiveLevel(ThinkingLevel.High)` thinks at High AND chains at High (Python: `with_reasoning(level="high")` or `with_cognitive_level("high")`; runtime: `mind.set_reasoning_level("high")`, `mind.set_reasoning_budget(120, "high")`). The budgeted trace is visible, not hidden: its surviving lines surface in the chain of thought as `Reasoning: …` steps (Hypothesize phase, capped at four) alongside thinking's own stages — with thinking disabled at build time there is no chain, and the trace still rides on `response.Reasoning.Explanations`. The spend is reported on every response (`ReasoningResult.BudgetUsed` / `BudgetLimit`; Python: `ctx.reasoning_trace` and the `reasoning.budget.*` scratch keys). Facts are never dropped by the budget — only the visible trace is trimmed.
+
 ```csharp
 mind.Teach("a bird can fly");
 var answer = mind.Ask("what is a bird?");      // "bird is a animal. bird can fly. ..."
@@ -272,17 +276,23 @@ mind.Knowledge.AddRule(new LogicRule(
 The thinking module builds an inspectable chain of thought and generates grounded thoughts (topic, feeling, recalled memories, inferred facts, new vocabulary) before any reply is composed.
 
 - **Level** — how many thoughts per cycle: `Low` = 1, `Medium` = 2 (default), `High` = 4, `VeryHigh` = 6, `Max` = 8; or an explicit token budget `Budget(300)` (≈ budget/50 thoughts). Every level keeps its promise even on a bare "hello".
+- **Per-level token budgets** — a budget LADDER, one entry per level from Low up to Max (or up to the ceiling's top level when a clamp is set): `Budget(ThinkingLevel.High, 260)` (Python: `budget(260, "high")` or `mind.set_thinking_budget(260, "high")`). The chosen level's budget sizes the thought set (≈ budget/50 thoughts, 1..10), so re-leveling re-sizes it. Defaults reproduce the classic ladder (50/100/200/300/400 → 1/2/4/6/8). Reads clamp — `TokensFor(ThinkingLevel.Max)` on an Only2-capped model answers with Medium's budget — and writes clamp too, so a Max budget on an Only2 model lands on Medium. A single global `Budget(300)` overrides every per-level entry (and suppresses automatic level choice — you named the exact budget). `tokens <= 0` removes a rung, falling back to the default ladder. Budgets serialize with the config; `TokensFor(level)` / `tokens_for(level)` reads them back at any time.
+- **Automatic** — `WithThinking(t => t.Auto())` (Python: `with_thinking(automatic=True)`) lets the mind choose its effort per turn: questions (+2), why/how probes, long inputs, novel ground, emotional surges and fresh epistemic gaps raise the level; the choice is clamped by the ceiling and recorded in the chain ("Automatic: chose to think at High"). With a ceiling set, the resolver only picks the LEVEL — the chosen level's own token budget follows. Hosts that reason outside the loop call the standalone resolver directly: `ThinkingAuto.Choose(text, hasDirectAnswer, recalledCount, emotionIntensity, epistemicGap, ceiling)` (Python: `cognify.thinking.thinking_auto.choose(...)`) — deterministic, same weights, never exceeds the ceiling.
 - **Ceiling** — the hard cap on how far the model may *ever* think: `ThinkingCeiling.Only1` (Low only) … `Only5` (everything, default). Requests above the ceiling — build-time or runtime (`mind.Config.Thinking.At(...)`) — are silently clamped to the ceiling's top level. The cap travels into exported GGUF (`cognify.thinking.ceiling` next to `cognify.thinking.enabled` / `cognify.thinking.level`).
 - **Tone** — `"balanced"`, `"focused"`, `"playful"`, `"poetic"`, `"plain"`.
 - **Switch** — `WithThinking(enabled: false)` (or `mind.Config.Thinking.Enable(false)`) makes the model answer directly with no thoughts at all.
+- **Lines up with reasoning** — reasoning owns its own `ReasoningLevel` / `ReasoningCeiling` enums, rung for rung identical to the thinking ones, with the same default budgets: `WithCognitiveLevel(ThinkingLevel.High)` maps the level 1:1 onto both modules in one call (or level each independently: `WithThinking(t => t.At(ThinkingLevel.High))` + `WithReasoning(r => r.At(ReasoningLevel.Max))`), and the exported GGUF names the levels in llama.cpp's `--reasoning-effort` vocabulary (`low`, `medium`, `high`, `xhigh`, `max` — VeryHigh maps to `xhigh`), with each module's per-level budget ladder next to them.
 
 ```csharp
 .WithThinking(t => t.At(ThinkingLevel.High)      // 4 thoughts per cycle
                      .WithTone("poetic")
+                     .Budget(ThinkingLevel.Max, 480)   // the ladder, per rung
                      .UpTo(ThinkingCeiling.Only3))  // Max requests clamp to High
 ```
 
 Deliberation generates candidates in seven styles (informative, empathetic, curious, concise, reflective, encouraging, trained) and picks one with the hybrid learned value model; fluency from the language models breaks close ties.
+
+The conversation itself is tracked separately from the options: `new ConversationTracker()` (Python: `ConversationTracker()` from `cognify.core.conversation`). Feed each turn with `tracker.Observe(mind, userText, replyText, cycle)` (Python: `tracker.observe(mind, user_text, reply_text, cycle)`) and read `tracker.Topics` / `PendingQuestions` / `Familiarity` / `Summary()` (Python: `topics` / `pending_questions` / `familiarity` / `summary()`). Topics are counted from the user's content words; a user question whose reply shares none of its content words is kept as an open thread (max 3, fading after 8 more cycles); every 6th turn the top topics land in long-term memory ("We have been talking about …"), so the understanding survives save/reload like the rest of the mind.
 
 ### 5.3 Expression & conversational knobs — what the mind shows
 Chat stays natural by default: feelings are *felt* (an epistemic feeling comes out as "Hm — that one caught me off guard"), internals are invisible unless the host surfaces them. `WithExpression(e => e.Feelings(true).FollowUps(false).Thinking(true).Meta(true))` restores mechanical feeling announcements, disables her own follow-up questions, or lets the host show the thought trace / confidence-style-cycle meta line. `WithConversational(r => r.rate(2.0))` (Python: `with_conversational(rate=2.0)`) scales talkativeness. Follow-up asks ("Who are they to you?") are on by default; her honest reaction to brand-new words is not a follow-up and stays available either way.
@@ -314,7 +324,9 @@ From-scratch, dependency-free, pure C#/Python:
 | `HybridNextToken` | the blend: n-gram exactness + transformer generalization; an untrained transformer degrades gracefully to pure n-gram |
 | `AdamOptimizer` | the shared Adam implementation |
 
-`TransformerConfig` defaults (both sides): `Dim = 32`, `Heads = 4`, `Layers = 2`, `ContextLen = 16`, `FfnMult = 4`, `Dropout = 0.1`, `LearningRate = 3e-3`, `Seed = 42`, `MaxVocab = 2048`, `BatchSize = 16`, `MaxWindowsPerEpoch = 512` (Python: 96), `GradClip = 1.0`. The transformer **trains lazily** — automatically once ~600 new tokens (`AutoTrainTokens = 600`, `AutoTrainEpochs = 6`) have accumulated, or explicitly via `mind.TrainDeepModel(...)`. Weights persist in the snapshot; when trained they also export as `cognify.transformer.*` GGUF/safetensors tensors (§8).
+`TransformerConfig` defaults (both sides): `Dim = 32`, `Heads = 4`, `Layers = 2`, `ContextLen = 16`, `FfnMult = 4`, `Loop = 1`, `Dropout = 0.1`, `LearningRate = 3e-3`, `Seed = 42`, `MaxVocab = 2048`, `BatchSize = 16`, `MaxWindowsPerEpoch = 512` (Python: 96), `GradClip = 1.0`. The transformer **trains lazily** — automatically once ~600 new tokens (`AutoTrainTokens = 600`, `AutoTrainEpochs = 6`) have accumulated, or explicitly via `mind.TrainDeepModel(...)`. Weights persist in the snapshot; when trained they also export as `cognify.transformer.*` GGUF/safetensors tensors (§8).
+
+**The Loop Transformer** (`TransformerConfig.Loop`, 1–8, default 1) — weight-tied recurrent depth (Universal Transformer / ALBERT style): the block stack is applied `Loop` times per forward pass, so `Loop = 2` with `Layers = 1` runs ONE block's weights twice — the same parameter count, twice the effective depth. The model "thinks longer" per token without growing, and gradients sum over every application so looping trains exactly like a deeper stack with tied weights. Configure it through the builder (`WithTransformer` / `with_transformer`); snapshots carry it (a one-pass model refuses a looped snapshot and vice versa), and the llama.cpp export unrolls it into `Layers × Loop` physical blocks — an unrolled model computes exactly the same function, and llama.cpp has no weight tying across blocks (`gpt2.block_count` reports the unrolled count; `cognify.transformer.layers` / `cognify.transformer.loop` record the logical stack, §8).
 
 ```csharp
 var report = mind.TrainDeepModel(epochs: 20);
@@ -324,6 +336,13 @@ var net = new DeepNet(16, [32, 32], 4, DeepActivation.GELU, DeepOutput.Softmax, 
 net.Train(X, classLabels, epochs: 100, learningRate: 0.01);
 var lm = new TransformerLM(new TransformerConfig { Dim = 48, Layers = 3, ContextLen = 24 });
 lm.Observe("some training text"); lm.Train(epochs: 30);
+
+// Loop Transformer: one 1-block stack, looped twice — same parameters as
+// Layers = 1, twice the effective depth.
+using var loopedMind = MindBuilder.Create("Fino")
+    .WithMemory()
+    .WithTransformer(c => c with { Layers = 1, Loop = 2 })
+    .Build();
 ```
 
 ### 5.8 Self-improvement — learning from reactions
@@ -467,10 +486,13 @@ The concrete case: the shipped dictionary corpus (`corpus/words-and-meanings.txt
 The fix, in order:
 
 1. **Feed conversational lines.** `greeting-corpus.txt` (ships with both repos' download sets) is the minimal example: dozens of natural greeting exchanges (`hello`, `hi`, `good morning`, `how are you`, `talking starts when you say hello`, …). Any corpus that contains the *kind of exchange* you want works the same way.
-2. **Deep-train with the loop.** A small corpus wants more epochs and early stopping:
+2. **Deep-train with the loop — and hold out a validation split.** A small corpus wants more epochs and early stopping, and `TrainFile` can hold out 20% of the file so you can *watch* generalization instead of guessing:
 
    ```csharp
-   mind.TrainFile("greeting-corpus.txt");
+   // 80% of the file trains, 20% is held out and scored (deterministic
+   // split — the same file + seed always hold out the same lines).
+   var report = mind.TrainFile("greeting-corpus.txt", validationSplit: 0.2);
+   Console.WriteLine(report);   // "... Validation: 9 line(s) held out, loss 1.234 nats/token ..."
    mind.TrainDeepModel(new TransformerTrainOptions {
        Epochs = 40, LearningRate = 0.03, Decay = 0.95, Patience = 4, MinDelta = 1e-4,
        Progress = (e, total, loss) => Console.WriteLine($"epoch {e}/{total}: {loss:F3}"),
@@ -478,9 +500,14 @@ The fix, in order:
    var reply = mind.Ask("hello");   // -> "Talking starts when you say hello"
    ```
 
+   The report's `ValidationLoss` is the SAME cross-entropy the deep-training loop minimizes (nats/token), computed forward-only on the held-out lines — directly comparable to the epoch losses, and NaN until the deep model has been trained once. If validation loss goes UP while training loss goes down, the model is memorizing, not learning. Validate first, then run one plain `TrainFile(path)` pass so the final model has seen everything. (Python: `mind.train_file(path, validation_split=0.2)`; `mind.neural_language_model.evaluate(lines)` scores any lines without touching the weights.)
+
    `scripts/diagnose_hello.py` (CognifyPy repo scripts set) reproduces the whole story end-to-end: train on the dictionary alone → "hello" yields word salad; add the greeting corpus + loop → "hello" yields a real reply.
 3. **Mix your corpora.** Dictionary lines teach recallable definitions; conversational lines teach speech. A mind that only ever saw definitions can only speak definitions. Keep both, plus facts and a number line, and dedup is automatic.
 4. **Then export.** A served GGUF speaks with its raw transformer alone — no phrase pool, no reasoning, no lexicon. Whatever the weights learned is all the listener gets. Train first, export second.
+5. **Serve with the exported sampling profile.** The same trained weights can look brilliant or broken depending on the sampling settings: a tiny model served at `temperature 1.61` with `Repetition Penalty: Off` and `Max Tokens: Max` loops and rambles for thousands of tokens per reply even when the corpus is right. The export writes the recommended values as `cognify.sampling.*` GGUF metadata (§9) — set them in llama.cpp's flags or Unsloth's sampling panel (`--temp 0.7 --top-k 40 --top-p 0.9 --repeat-penalty 1.2 --n-predict 128` for a greeting-scale model) before judging the output.
+
+**Never wrap `TrainFile` in a re-train loop.** Facts are deduplicated, but the language buffer is not: every pass re-feeds every line into the next-token counts, so looping `TrainFile` 20 times over-weights the corpus's most frequent bigrams 20-fold. The symptom is exactly the *"good morning is warm"* class of reply — two corpus fragments ("good morning", "…is warm") blended by raw bigram frequency, with no grammar to hold them apart. One `TrainFile` pass (with a validation split) plus `TrainDeepModel` epochs is the whole training recipe; if you want more language exposure, add more corpus lines, not more passes over the same lines. The runtime's own generation now carries the same defenses the serve flags give llama.cpp: sampling includes the end token (a finished sentence can end itself instead of running to the token cap) and a no-triple guard re-samples any word that would land three times in a row.
 
 **Hyperparameter starting points** (the tiny default transformer: 32-dim, 2 layers, 16-token context):
 
@@ -535,11 +562,11 @@ MindExporter.ExportTokenizer(mind, "tokenizer/");               // HF WordPiece 
 
 Export APIs take a **file** path; an existing directory target writes the file inside it named after the mind, and missing parents are created (no raw `UnauthorizedAccessException`). The runnable GGUF needs a **trained** transformer — call `mind.TrainDeepModel(...)` explicitly before exporting unless real conversation has already triggered the lazy pass.
 
-**The llama.cpp-runnable GGUF** maps the transformer onto the **stock `gpt2` architecture**: exact llama.cpp tensor names (`token_embd.weight`, `position_embd.weight`, `blk.N.attn_norm`, `blk.N.attn_qkv` fused as GPT-2's `c_attn`, `blk.N.attn_output`, `blk.N.ffn_up`, `blk.N.ffn_down`, `output_norm`; weight-tied output head omitted), a full `tokenizer.ggml` set (byte-unicode `Ġ` tokens, i32 token types, special ids, BPE merges) so prompt encoding reaches the word ids she trained with, and **post-write self-verification**: every file is re-read, compared value-for-value and linted against the gpt2 loader conformance rules — a broken export fails at export time, not inside llama.cpp.
+**The llama.cpp-runnable GGUF** maps the transformer onto the **stock `gpt2` architecture**: exact llama.cpp tensor names (`token_embd.weight`, `position_embd.weight`, `blk.N.attn_norm`, `blk.N.attn_qkv` fused as GPT-2's `c_attn`, `blk.N.attn_output`, `blk.N.ffn_up`, `blk.N.ffn_down`, `output_norm`; weight-tied output head omitted), a full `tokenizer.ggml` set (byte-unicode `Ġ` tokens, i32 token types, special ids, BPE merges) so prompt encoding reaches the word ids she trained with, and **post-write self-verification**: every file is re-read, compared value-for-value and linted against the gpt2 loader conformance rules — a broken export fails at export time, not inside llama.cpp. A Loop Transformer mind exports **unrolled**: `Layers × Loop` physical `blk.N` blocks (llama.cpp has no weight tying across blocks; an unrolled model computes exactly the same function), with `gpt2.block_count` = the unrolled count and `cognify.transformer.layers` / `cognify.transformer.loop` recording the logical stack it came from.
 
 **Context length and the "Total x / 16" readout** — `gpt2.context_length` equals the trained window (`TransformerConfig.ContextLen`, default 16: the learned absolute position embeddings bake it into the weights). `ExportOptions.LlamaCppContextLength = 128` stretches it by linear position interpolation (pi-style), so Unsloth/llama.cpp show /128 and `llama-server -c 128` works; coherence degrades the further past the trained range you push. Per-completion length is a request-time knob, not a weight: `n_predict` on the command line, `max_tokens` in the OpenAI-compatible API / Unsloth's max-tokens field.
 
-**Capability metadata + chat template** — every builder switch travels twice. First as `cognify.*` KV metadata: `cognify.modules`, one `cognify.<capability>.enabled` boolean per known module (audio, code, tools, reasoning, memory, emotions, personality, goals, vision, embeddings, multilingual, self_learning, media_generation), `cognify.web_search.enabled` / `cognify.web_fetch.enabled`, `cognify.tools.count` / `cognify.tools.names`, `cognify.description`, and `cognify.thinking.{enabled,level,ceiling}`. Second as a JSON manifest embedded in `tokenizer.chat_template` (a Jinja `{%- set cognify_manifest = '…' %}` that renders nothing; `llama-server` exposes the template via `GET /props`, so clients can extract it and **gray out what the mind lacks**). The template also honors Qwen3's `enable_thinking` kwarg: `chat_template_kwargs: {"enable_thinking": false}` drops the `assistant: thought:` cue (thinking minds end on it; non-thinking minds carry no cue). `cognify-chat.html` (repo download set) is a ready-made client for `llama-server --jinja`: capability chips, grayed disabled modules, a Unsloth-style "Thinking · <level>" selector with above-ceiling options locked, tools popover, tok/s, reasoning_content blocks.
+**Capability metadata + chat template** — every builder switch travels twice. First as `cognify.*` KV metadata: `cognify.modules`, one `cognify.<capability>.enabled` boolean per known module (audio, code, tools, reasoning, memory, emotions, personality, goals, vision, embeddings, multilingual, self_learning, media_generation), `cognify.web_search.enabled` / `cognify.web_fetch.enabled`, `cognify.tools.count` / `cognify.tools.names`, `cognify.description`, and the effort metadata for both cognitive modules — `cognify.thinking.{enabled,level,ceiling,budget}` and `cognify.reasoning.{enabled,level,ceiling,budget}`, the level names in llama.cpp's `--reasoning-effort` vocabulary (`low`, `medium`, `high`, `xhigh`, `max`; VeryHigh maps to `xhigh`) so a client can pass them straight to the server, and `budget` the token cap the current level buys (llama.cpp `--reasoning-budget` semantics: N>0 = token cap per cycle). Second as a JSON manifest embedded in `tokenizer.chat_template` (a Jinja `{%- set cognify_manifest = '…' %}` that renders nothing; `llama-server` exposes the template via `GET /props`, so clients can extract it and **gray out what the mind lacks**): the `thinking` and `reasoning` objects each carry `enabled`, the operating `level`, the hard `ceiling`, the implemented effort ladder (`levels`, lowest→highest — the same shape as llama.cpp's `chat_template_caps.reasoning_effort_levels`) and the per-level token budgets (`budgets`, e.g. `{"low": 50, …, "max": 400}`), so a client can drive both modules' levels exactly the way `--reasoning-effort` / `--reasoning-budget` do. The template also honors Qwen3's `enable_thinking` kwarg: `chat_template_kwargs: {"enable_thinking": false}` drops the `assistant: thought:` cue (thinking minds end on it; non-thinking minds carry no cue). `cognify-chat.html` (repo download set) is a ready-made client for `llama-server --jinja`: capability chips, grayed disabled modules, a Unsloth-style "Thinking · <level>" selector with above-ceiling options locked, tools popover, tok/s, reasoning_content blocks.
 
 **What a GGUF cannot carry** — a GGUF is frozen weights and llama.cpp is a bare inference runtime: the modules behind `WithAudio()`, `WithCode()`, `WithTools()`, web search, the thinking loop, memory and the sayings pool execute only in the Cognify runtime. The `cognify.*` keys *document* what the mind carries; the chat template only *formats prompts*. Facts can be baked into weights by training on them; everything else needs the runtime or an agent harness around the server (§9).
 
@@ -571,6 +598,115 @@ What each format carries:
 4. **Runtime bridge for real capabilities**: tools, web search, audio, code execution and the thinking loop are Cognify runtime modules. Two supported patterns: (a) run the mind in-process for cognition and use llama.cpp as its generation backend; (b) wrap the llama.cpp server in an agent harness that executes tools and re-prompts. The GGUF metadata + chat template exist so the *UI layer* knows what the model supports; no metadata can give llama.cpp new abilities.
 
 Unsloth note: exported models load with the bundled word-level tokenizer; out-of-vocabulary prompt words fall back to `<unk>`, and the FFN uses the tanh GELU approximation while llama.cpp evaluates exact GELU (sub-0.003 delta per activation).
+
+
+### Recommended sampling settings — the exported `cognify.sampling.*` metadata
+
+Every GGUF export ships the sampling profile the model needs to produce clean output, sized to its vocabulary:
+
+| keys | < 1k vocab pieces (greeting / toy scale) | < 32k pieces (small chat model) | bigger |
+| --- | --- | --- | --- |
+| `cognify.sampling.temperature` | 0.7 | 0.7 | 0.8 |
+| `cognify.sampling.top_p` | 0.9 | 0.9 | 0.9 |
+| `cognify.sampling.top_k` | 40 | 40 | 40 |
+| `cognify.sampling.repeat_penalty` | 1.20 | 1.15 | 1.10 |
+| `cognify.sampling.max_tokens` | 128 | 256 | 512 |
+
+Why: a word-level model trained on a small corpus can only recombine the words it saw, and it has no learned sense of when to stop. At a hot temperature with the repetition penalty OFF it falls into "what you is what you is what you" loops and rambles until the token limit — thousands of tokens of noise per reply. The profile tames the sampling, breaks the loops and caps the reply.
+
+Serving flags for a small Cognify model (Unsloth: same values in its sampling panel):
+
+```
+llama-server -m fino-llamacpp.gguf -c 16384 --jinja \
+  --temp 0.7 --top-p 0.9 --top-k 40 --repeat-penalty 1.2 --n-predict 128
+```
+
+Reading the generation stats: speed (`tok/s`) and draft acceptance (`Draft accepted 99%`) are the serving stack doing its job — nothing to optimize there. `First token: 1.60s` is the draft-model warm-up, not the model's quality. The number that matters is `Tokens:` per reply — if it is in the thousands for a one-line answer, the sampling settings (temperature / repeat penalty / max tokens) are wrong, not the model.
+
+
+### Chat templates — the built-in Jinja engine (llama.cpp compatible)
+
+Both runtimes carry a dependency-free mini-Jinja engine (`Cognify.Core.ChatJinja` /
+`cognify.core.jinja`) that renders the templates llama.cpp's `minja` accepts — the
+subset real model templates (ChatML, Qwen2.5, Qwen3, Llama-3.1, Zephyr) actually
+use. `Mind.ApplyChatTemplate` / `apply_chat_template` is the entry point:
+
+```csharp
+var prompt = mind.ApplyChatTemplate(
+    new object?[] { ("user", "Weather in Tokyo?") },
+    template: File.ReadAllText("qwen3.jinja"),    // any llama.cpp --jinja template
+    tools: tools,                                 // OpenAI-style dictionaries
+    addGenerationPrompt: true,
+    extraVariables: new Dictionary<string, object?> { ["enable_thinking"] = false });
+```
+
+```python
+prompt = mind.apply_chat_template(
+    [("user", "Weather in Tokyo?")],
+    template=Path("qwen3.jinja").read_text(),
+    tools=tools, add_generation_prompt=True,
+    enable_thinking=False)   # extra kwargs become template variables
+```
+
+With no template, the mind's OWN GENERATED template is used (below).
+`bos_token` / `eos_token` default to the mind's special tokens like llama-server
+does; messages may be role/content dictionaries or `(role, content)` tuples.
+
+### Generated templates — the mind writes its own
+
+The chat template shipped in a GGUF is not a hand-written constant: each mind
+SYNTHESIZES it from its live state. `mind.GenerateChatTemplate(manifestJson?)` /
+`mind.generate_chat_template(manifest_json=None)` composes a minja-compatible
+template from what the mind actually carries:
+
+- a provenance comment naming the mind, its thinking switch/level/ceiling,
+  capabilities, tool names and description — renders nothing, but is
+  extractable from GET /props next to the manifest, and every value is
+  sanitized so a description can never terminate the comment early;
+- the manifest `set` line — only in the variant the exporter embeds;
+- a tools branch (`{% if tools %}tools: {{ tools | tojson }}{% endif %}`) —
+  ONLY for minds with the tools capability: a plain mind's template cannot
+  even express tools, matching the capability the GGUF documents;
+- the `role: content` message loop and a thinking-aware assistant cue —
+  the Qwen3 `enable_thinking` kwarg handling exists only for minds that
+  can think.
+
+Generation is deterministic (same mind state → same template bytes), and
+`Mind.ApplyChatTemplate` / `apply_chat_template` default to the mind's own
+generated template, so the runtime format and the exported file agree by
+construction. The exporter embeds exactly `mind.GenerateChatTemplate(...)`,
+tags the file with `cognify.chat_template.generator = cognify-builtin-jinja/1`,
+and SELF-VERIFIES the generated template through the built-in engine before
+writing it — a template that cannot render the mind's own format byte-exactly
+aborts the export instead of shipping broken.
+
+Supported (mirrors minja): `{{ expr }}` output; `{% if/elif/else %}`; `{% for %}`
+with the `loop` variable (`index/index0/first/last/length/revindex`) and
+for-`else`; `{% set %}` with plain, tuple and `ns.attr` targets — assignments
+inside a loop stay in that iteration's scope, which is why templates use
+`namespace()` to accumulate state; `{% generation %}` blocks (llama.cpp
+extension); `{# comments #}`; `-` whitespace control on every tag; filters
+(`tojson` with sorted keys like llama.cpp's nlohmann dump plus `indent`, `trim`,
+`length`/`count`, `first`, `last`, `join`, `items`, `reject`/`select` with
+tests, `default`, `upper`/`lower`/`capitalize`, `replace`, `reverse`, `string`,
+`list`, `int`, `float`, `sort`); tests (`defined`/`undefined`, `none`, `string`,
+`number`, `integer`/`float`, `boolean`, `true`/`false`, `mapping`, `iterable`,
+`equalto`/`eq`, `ne`, `divisibleby`); the global functions `raise_exception`,
+`strftime_now`, `namespace`, `range`; slices with negative steps
+(`messages[::-1]`, `messages[1:]`); and string/dict methods (`split`, `strip`
+family, `startswith`/`endswith`, `replace`, `get`, `keys`, `values`, `items`).
+Not supported (clear errors, like minja without its callback hooks): macros,
+includes, extends/blocks, `{% raw %}`, the `map`/`selectattr` filters and
+auto-escaping.
+
+Compatibility is pinned by fixtures, not by hope: real templates fetched from
+HuggingFace (`tests/templates/*.jinja`, provenance in its README) render to
+committed golden bytes (`tests/goldens/`) that BOTH engines must reproduce
+byte-for-byte — the C# and Python suites fail if the two implementations ever
+drift. The GGUF exporter's `tokenizer.chat_template` is emitted by the same
+shared emitter the engine renders (`ChatJinja.CognifyChatTemplate` /
+`cognify_chat_template`), so an exported file's chat format, the capability
+manifest extractable from /props, and the runtime default can never disagree.
 
 ---
 

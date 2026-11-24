@@ -59,6 +59,10 @@ class CognitiveContext:
     recalled: List[Tuple[MemoryRecord, float]] = field(default_factory=list)
     learned_facts: List[Fact] = field(default_factory=list)
     derived_facts: List[Fact] = field(default_factory=list)
+    # Budgeted explanation lines the reasoning step produced this cycle
+    # ("Learned 1 new fact(s)...", "Arithmetic 2 + 2 = 4...", "Inferred: ...")
+    # — thinking surfaces them alongside its own chain stages.
+    reasoning_trace: List[str] = field(default_factory=list)
     answer: Optional[ReasoningAnswer] = None
     knowledge_size: int = 0
     active_goal: Optional[Any] = None

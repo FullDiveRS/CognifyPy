@@ -1,0 +1,5 @@
+<|im_start|>system
+You are Qwen, created by Alibaba Cloud.<|im_end|>
+<|im_start|>user
+Weather in Tokyo?<|im_end|>
+<|im_start|>assistant

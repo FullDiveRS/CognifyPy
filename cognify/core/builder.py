@@ -13,7 +13,9 @@ from ..capabilities.vision import VisionCapability
 from ..capabilities.audio import AudioCapability
 from ..emotions.personality import PRESETS, Personality
 from .mind import Mind
+from ..learning.transformer import TransformerConfig
 from .options import (ConversationalOptions, ExpressionOptions,
+                      ReasoningCeiling, ReasoningLevel, ReasoningOptions,
                       ThinkingCeiling, ThinkingLevel, ThinkingOptions)
 
 #: Every toggleable capability name accepted by :meth:`without` / :meth:`only`.
@@ -62,6 +64,7 @@ class MindBuilder:
         self._emotion_sensitivity = 1.0
         self._memory_capacity = 200
         self._encoder_dims = 128
+        self._transformer_config: Optional["TransformerConfig"] = None
         self._flags: Dict[str, bool] = {
             "reasoning": True, "thinking": True, "emotions": True,
             "memory": True, "goals": True, "learning": True,
@@ -75,6 +78,9 @@ class MindBuilder:
         self._extra_caps: List[Capability] = []
         # Thinking levels + what the mind shows in chat (see options.py).
         self._thinking_options = ThinkingOptions()
+        # Reasoning levels + trace budget — the SAME ladder as thinking
+        # (see options.py ReasoningOptions).
+        self._reasoning_options = ReasoningOptions()
         self._expression = ExpressionOptions()
         self._conversational = ConversationalOptions()
         self._allow_web_search = False
@@ -160,8 +166,89 @@ class MindBuilder:
         self._flags[key] = bool(value)
         return self
 
-    def with_reasoning(self, enabled: bool = True) -> "MindBuilder":
-        return self._set_flag("reasoning", enabled)
+    def with_reasoning(self, enabled: bool = True,
+                       level: "ReasoningLevel | str | None" = None,
+                       ceiling: "ReasoningCeiling | str | None" = None,
+                       depth: Optional[int] = None,
+                       budget: Optional[int] = None,
+                       allow_induction: Optional[bool] = None) -> "MindBuilder":
+        """Reasoning, with levels — its OWN ladder (:class:`ReasoningLevel`
+        / :class:`ReasoningCeiling`), rung for rung identical to the
+        thinking one, so the two modules line up level for level.
+
+        Examples::
+
+            .with_reasoning()                            # default (medium, depth 6)
+            .with_reasoning(False)                       # this model cannot reason
+            .with_reasoning(level="high")                # depth 8, 200-token trace
+            .with_reasoning(depth=4)                     # pinned depth, level stops retuning it
+            .with_reasoning(budget=120)                  # explicit trace budget
+            .with_reasoning(ceiling="only2")             # this model may never reason above Medium
+
+        ``budget`` caps the reasoning TRACE tokens per cycle (arithmetic /
+        inference / learning explanations); facts stay in the knowledge
+        base, only the visible trace is trimmed. ``ceiling`` — the hard cap
+        (Only1 = Low only, Only2 = up to Medium, Only3 = up to High, Only4 =
+        up to Very High, Only5 = everything, the default) — is exported with
+        the model (``cognify.reasoning.ceiling``) so serving stacks can read
+        it. One call can set the effort of BOTH modules:
+        :meth:`with_cognitive_level`.
+        """
+        self._set_flag("reasoning", enabled)
+        self._reasoning_options.enable(enabled)   # keep the flag truthful — the exporter reads it
+        if ceiling is not None:
+            self._reasoning_options.up_to(ceiling)
+        if level is not None:
+            self._reasoning_options.at(level)
+        if depth is not None:
+            self._reasoning_options.depth(depth)
+        if budget is not None:
+            self._reasoning_options.budget(budget)
+        if allow_induction is not None:
+            self._reasoning_options.allow_induction = bool(allow_induction)
+        return self
+
+    def with_transformer(self, configure: "Callable[[TransformerConfig], TransformerConfig]") -> "MindBuilder":
+        """Configures the mind's neural language model architecture — the
+        tiny GPT-style transformer that deep-trains on her observations and
+        gets exported to llama.cpp. The hook for everything beyond the
+        default: dims, heads, layers, context, seed, and the LOOP
+        TRANSFORMER (``loop=2`` runs one block stack twice per pass —
+        weight-tied recurrent depth, more "thinking" per token without more
+        parameters). The model trains lazily from conversation or
+        ``train_file``, exactly like the default one; only the shape
+        differs. Call before build()::
+
+            MindBuilder("Fino").with_transformer(
+                lambda c: replace(c, layers=1, loop=2)).build()"""
+        from dataclasses import replace
+        self._transformer_config = configure(
+            self._transformer_config or TransformerConfig())
+        return self
+
+    def with_cognitive_level(self, level: "ThinkingLevel | str",
+                             ceiling: "ThinkingCeiling | str | None" = None) -> "MindBuilder":
+        """Sets the cognitive effort for the WHOLE mind in one call: the
+        thinking level AND the reasoning level, each only when that module
+        is enabled in this builder. Reasoning owns its OWN ladder
+        (:class:`ReasoningLevel`, rung for rung identical to the thinking
+        one), so the requested level maps 1:1 onto both — one level lines up
+        the effort of both::
+
+            .with_reasoning().with_thinking().with_cognitive_level("high")
+
+        thinks at High AND chains inferences at High (depth 8, 200-token
+        trace). ``ceiling`` caps both modules (default Only5)."""
+        if self._flags.get("thinking", False):
+            if ceiling is not None:
+                self._thinking_options.up_to(ceiling)
+            self._thinking_options.at(level)
+        if self._flags.get("reasoning", False):
+            if ceiling is not None:
+                self._reasoning_options.up_to(
+                    ReasoningCeiling.from_thinking(ceiling))
+            self._reasoning_options.at(ReasoningLevel.from_thinking(level))
+        return self
 
     def with_thinking(self, enabled: bool = True,
                       level: "ThinkingLevel | str | None" = None,
@@ -439,8 +526,10 @@ class MindBuilder:
                     emotion_sensitivity=self._emotion_sensitivity,
                     memory_capacity=self._memory_capacity,
                     encoder_dims=self._encoder_dims,
+                    transformer_config=self._transformer_config,
                     gender=self._gender,
                     thinking=self._thinking_options,
+                    reasoning=self._reasoning_options,
                     expression=self._expression,
                     conversational=self._conversational,
                     allow_web_search=self._allow_web_search,

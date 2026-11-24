@@ -6,6 +6,8 @@ Loop order per cycle:
 """
 from __future__ import annotations
 
+import math
+import random
 import urllib.parse
 from typing import Any, Dict, List, Optional
 
@@ -21,7 +23,7 @@ from ..learning.hybrid_next_token import predict_next as _hybrid_predict
 from ..learning.learner import LearningModule
 from ..learning.next_token import NextTokenModel, TokenPrediction
 from ..learning.self_improvement import SelfImprovement, SelfImprovementReport
-from ..learning.transformer import TransformerLM, TransformerTrainOptions, TransformerTrainingReport
+from ..learning.transformer import TransformerConfig, TransformerLM, TransformerTrainOptions, TransformerTrainingReport
 from ..memory.memory import AssociativeMemory
 from ..reasoning.facts import Fact, FactParser
 from ..reasoning.inference import InferenceEngine
@@ -33,7 +35,9 @@ from ..util import clamp, tokenize
 from .context import CognitiveContext, Response, ReasoningAnswer
 from .events import EventBus
 from .gender import GenderOptions, UNSPECIFIED
+from .jinja import cognify_chat_template, generate_chat_template, render
 from .options import (ConversationalOptions, ExpressionOptions,
+                      ReasoningCeiling, ReasoningLevel, ReasoningOptions,
                       ThinkingCeiling, ThinkingLevel, ThinkingOptions)
 from .phrases import PhrasePool
 from .stimulus import Modality, Stimulus
@@ -56,17 +60,38 @@ def _is_sayable(line: str) -> bool:
 
 class TrainingReport:
     """What one training pass added: lines read, facts learned, sayings added
-    to the mind's spoken vocabulary and number lines taught to its arithmetic."""
+    to the mind's spoken vocabulary and number lines taught to its arithmetic.
+    When train_file ran with a validation split, the validation_* fields carry
+    how the held-out lines score under the trained transformer — the
+    generalization check a re-train loop can't give you."""
 
     def __init__(self) -> None:
         self.lines = 0
         self.facts_learned = 0
         self.sayings_added = 0
         self.sequences_taught = 0
+        # Validation split (train_file): the fraction held out (0 = none),
+        # the held-out line count, and their cross-entropy under the
+        # transformer in nats/token — the SAME metric deep training
+        # minimizes, computed forward-only (no weight updates, no buffer
+        # growth). NaN when the model is untrained or nothing scored.
+        self.validation_split = 0.0
+        self.validation_lines = 0
+        self.validation_loss = float("nan")
+        self.validation_words = 0
 
     def __str__(self) -> str:
-        return (f"{self.lines} line(s): {self.facts_learned} fact(s), "
-                f"{self.sayings_added} saying(s), {self.sequences_taught} number line(s).")
+        s = (f"{self.lines} line(s): {self.facts_learned} fact(s), "
+             f"{self.sayings_added} saying(s), {self.sequences_taught} number line(s).")
+        if self.validation_split > 0:
+            if self.validation_lines > 0 and not math.isnan(self.validation_loss):
+                s += (f" Validation: {self.validation_lines} line(s) held out, "
+                      f"loss {self.validation_loss:.3f} nats/token over "
+                      f"{self.validation_words} token(s).")
+            else:
+                s += (f" Validation: {self.validation_lines} line(s) held out "
+                      "(no score — train the deep model first).")
+        return s
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"TrainingReport({self!s})"
@@ -78,8 +103,10 @@ class Mind:
     def __init__(self, *, name: str = "Cognify", seed: int = 42,
                  personality: Personality, emotion_sensitivity: float,
                  memory_capacity: int, encoder_dims: int,
+                 transformer_config: Optional["TransformerConfig"] = None,
                  gender: Optional[GenderOptions] = None,
                  thinking: Optional[ThinkingOptions] = None,
+                 reasoning: Optional[ReasoningOptions] = None,
                  expression: Optional[ExpressionOptions] = None,
                  conversational: Optional[ConversationalOptions] = None,
                  allow_web_search: bool = False,
@@ -99,6 +126,11 @@ class Mind:
         # Thinking levels + expression (what chat shows) — developer-facing
         # options, mirror of the C# ThinkingOptions / ExpressionOptions.
         self.thinking_options = thinking or ThinkingOptions()
+        # Reasoning levels + trace budget — the SAME ladder as thinking
+        # (levels, ceiling, default budgets), mirror of the C#
+        # ReasoningOptions: the level sizes the inference depth and the
+        # explanation trace the reasoning step may spend per cycle.
+        self.reasoning_options = reasoning or ReasoningOptions()
         self.expression = expression or ExpressionOptions()
         # Conversational options — how TALKATIVE she is and how much she
         # collects from the conversation (mirror of C# ConversationalOptions).
@@ -155,7 +187,7 @@ class Mind:
         # no dependencies) that observes the same text stream and trains
         # lazily — automatic when enough language accumulates, or explicit
         # via train_deep_model(). Predictions blend both models.
-        self.neural_language_model = TransformerLM()
+        self.neural_language_model = TransformerLM(transformer_config)
         # Self-improvement: implied feedback from the user's next message
         # grades the previous reply (wording reputations + Q rewards).
         self.improvement = SelfImprovement()
@@ -279,8 +311,14 @@ class Mind:
             # teaching, not calculation, so no calculator is ever needed for
             # sums that stay on the taught line.
             self.arithmetic.teach_sequence(stimulus.text)
-            derived = self.engine.forward_chain(self.kb)
-            derived += self.engine.induce(self.kb, min_instances=3)
+            # REASONING LEVELS — the level ladder sizes the forward-chaining
+            # depth (Low 2 … Max 12 passes) unless depth() pinned a value,
+            # the same way the thinking level sizes thought rounds.
+            derived = self.engine.forward_chain(
+                self.kb, max_rounds=self.reasoning_options.effective_depth)
+            if self.reasoning_options.allow_induction:
+                derived += self.engine.induce(
+                    self.kb, min_instances=self.reasoning_options.induction_threshold)
             ctx.derived_facts = derived
             for fact in derived:
                 self.events.emit("fact_derived", cycle, fact=str(fact))
@@ -299,6 +337,7 @@ class Mind:
                                                  confidence=math_result.confidence,
                                                  kind="arithmetic")
                     ctx.scratch["math_answered"] = True
+                    ctx.scratch["_math_result"] = math_result
                 elif (self.arithmetic.looks_like_arithmetic_question(stimulus.text)
                       or self.arithmetic.looks_like_word_problem(stimulus.text)):
                     # recognized as arithmetic but unanswerable from taught
@@ -306,6 +345,40 @@ class Mind:
                     ctx.scratch["math_attempted"] = True
                 elif stimulus.text and (ctx.has_question or "?" in stimulus.text):
                     ctx.answer = self.engine.answer(self.kb, stimulus.text)
+
+            # 4b. THE REASONING TRACE + ITS BUDGET — lined up with thinking:
+            # arithmetic steps, fresh inference and learning explanations are
+            # budgeted lines (level ladder or a global budget); lines beyond
+            # the budget are dropped — the facts themselves stay in the
+            # knowledge base, only the visible trace is trimmed. Thinking
+            # surfaces the surviving lines alongside its own chain stages,
+            # so reasoning appears WITH thinking, not instead of it.
+            trace: List[str] = []
+            if ctx.learned_facts:
+                trace.append(
+                    f"Learned {len(ctx.learned_facts)} new fact(s) from the input.")
+            math_detail = ctx.scratch.pop("_math_result", None)
+            if math_detail is not None:
+                trace.append(
+                    f"Arithmetic {math_detail.expression} = {math_detail.result} "
+                    + ("(a fact you taught me)" if math_detail.directly_taught
+                       else "(reasoned from taught arithmetic)"))
+            for fact in ctx.derived_facts[:5]:
+                trace.append(f"Inferred: {fact} (confidence {fact.confidence:0.2f})")
+            budget = self.reasoning_options.tokens_for(self.reasoning_options.level)
+            used = 0
+            kept: List[str] = []
+            for line in trace:
+                cost = len(line.split())
+                if used + cost > budget:
+                    break
+                used += cost
+                kept.append(line)
+            ctx.reasoning_trace = kept
+            ctx.scratch["reasoning.budget.used"] = used
+            ctx.scratch["reasoning.budget.limit"] = budget
+            if len(trace) > len(kept):
+                ctx.scratch["reasoning.budget.trimmed"] = len(trace) - len(kept)
 
         # 5. goals
         if self.flags.get("goals", True):
@@ -331,6 +404,18 @@ class Mind:
             ctx.thoughts = self.cot.run(ctx)
             for t in ctx.thoughts:
                 self.events.emit("thought", cycle, stage=t.stage.value, text=t.content)
+
+            # 6a-bis. REASON, ALONGSIDE — the reasoning step ran earlier this
+            # cycle and spent its own budget; its surviving trace lines join
+            # the chain of thought (HYPOTHESIZE stage, capped at four so the
+            # chain stays readable) — reasoning appears alongside thinking
+            # instead of only feeding the answer silently.
+            for line in ctx.reasoning_trace[:4]:
+                ctx.thoughts.add(ThoughtStage.HYPOTHESIZE,
+                                 f"Reasoning: {line}", 0.7)
+                self.events.emit("thought", cycle,
+                                 stage=ThoughtStage.HYPOTHESIZE.value,
+                                 text=f"Reasoning: {line}")
 
             # 6b. GENERATE — the thought generator produces the mind's silent
             # self-talk BEFORE anything is composed (thinking levels Low..Max
@@ -554,11 +639,41 @@ class Mind:
             self._train_line(line, report)
         return report
 
-    def train_file(self, path: str) -> "TrainingReport":
+    def train_file(self, path: str, validation_split: float = 0.0,
+                   split_seed: int = 42) -> "TrainingReport":
         """Trains the mind from a corpus file: one utterance per line, blank
-        lines and '#' comment lines are ignored."""
+        lines and '#' comment lines are ignored.
+
+        ``validation_split`` holds a fraction of the file OUT of training and
+        scores it instead — 0.2 trains on 80% and validates on the rest. The
+        split is a deterministic shuffle (seeded by ``split_seed``) so the
+        same file and seed always hold out the same lines; the report carries
+        the held-out lines' cross-entropy under the trained transformer
+        (``validation_loss``, nats/token — the same metric deep training
+        minimizes). Validation never touches the weights or the language
+        buffer. The default (0.0) trains on every line, exactly like before."""
         with open(path, "r", encoding="utf-8") as fh:
-            return self.train_all(fh.read().splitlines())
+            lines = [l for l in fh.read().splitlines()
+                     if l.strip() and not l.lstrip().startswith("#")]
+
+        split = 0.0 if validation_split is None or math.isnan(validation_split) \
+            else max(0.0, min(0.5, float(validation_split)))
+        hold_out = max(1, min(len(lines) - 1, int(len(lines) * split))) \
+            if len(lines) >= 2 and split > 0 else 0
+
+        report = self.train_all(lines[:len(lines) - hold_out] if hold_out else lines)
+        report.validation_split = split
+        report.validation_lines = hold_out
+        if hold_out:
+            # Deterministic shuffle → the held-out lines are a random-but-
+            # reproducible sample, not the file's tail (corpus files are
+            # often ordered by topic; a tail split would skew validation).
+            shuffled = list(lines)
+            random.Random(split_seed).shuffle(shuffled)
+            loss, tokens = self.neural_language_model.evaluate(shuffled[-hold_out:])
+            report.validation_loss = loss
+            report.validation_words = tokens
+        return report
 
     def _train_line(self, raw: str, report: "TrainingReport") -> None:
         if raw is None or not raw.strip():
@@ -846,6 +961,57 @@ class Mind:
                              **{"from": prev, "to": topic})
         self._last_conversation_topic = topic
 
+    # ------------------------------------------------------ thinking budgets
+    def set_thinking_budget(self, tokens: int,
+                            level: "ThinkingLevel | str | None" = None) -> "Mind":
+        """Sets a thinking TOKEN budget at runtime. One argument: ONE global
+        budget for every level (overrides the ladder AND the automatic
+        choice — the developer named the exact budget). Two arguments
+        ``set_thinking_budget(tokens, level)``: the budget for ONE level —
+        the ladder from Low up to Max, or up to the ceiling's top level when
+        a clamp is set (the level is clamped at write time, so a Max budget
+        on an Only2-capped model lands on Medium). The level's budget sizes
+        the generated thought set (roughly tokens/50 thoughts, 1..10); under
+        automatic thinking the resolver only picks the level and this budget
+        follows. ``tokens <= 0`` removes that level's custom entry. Chains.
+        """
+        self.thinking_options.budget(tokens, level)
+        return self
+
+    def thinking_tokens_for(self, level: "ThinkingLevel | str") -> int:
+        """The thinking tokens the given level may spend right now."""
+        return self.thinking_options.tokens_for(level)
+
+    # ------------------------------------------------------ reasoning budgets
+    def set_reasoning_budget(self, tokens: int,
+                             level: "ReasoningLevel | str | None" = None) -> "Mind":
+        """Sets a reasoning TOKEN budget at runtime — lined up with
+        ``set_thinking_budget``. One argument: ONE global budget for every
+        level (overrides the ladder). Two arguments
+        ``set_reasoning_budget(tokens, level)``: the budget for ONE level —
+        the ladder from Low up to Max, or up to the ceiling's top level when
+        a clamp is set. The budget caps the reasoning TRACE tokens
+        (arithmetic / inference / learning explanations) per cycle; facts
+        stay in the knowledge base, only the visible trace is trimmed.
+        ``tokens <= 0`` removes that level's custom entry. Chains."""
+        self.reasoning_options.budget(tokens, level)
+        return self
+
+    def reasoning_tokens_for(self, level: "ReasoningLevel | str") -> int:
+        """The reasoning tokens the given level may spend right now."""
+        return self.reasoning_options.tokens_for(level)
+
+    def set_reasoning_level(self, level: "ReasoningLevel | str",
+                            ceiling: "ReasoningCeiling | str | None" = None) -> "Mind":
+        """Sets the reasoning level at runtime on reasoning's own ladder
+        (:class:`ReasoningLevel`, clamped by :class:`ReasoningCeiling`; a
+        new ceiling may be set too) — the ladder re-sizes the inference
+        depth unless depth() pinned one. Chains."""
+        if ceiling is not None:
+            self.reasoning_options.up_to(ceiling)
+        self.reasoning_options.at(level)
+        return self
+
     # why/how-style words that raise the automatic thinking effort
     _AUTOMATIC_WHY_WORDS = ("why", "how ", "explain", "imagine", "design",
                             "compare")
@@ -937,6 +1103,63 @@ class Mind:
             stats["learning"] = self.learner.stats()
         return stats
 
+    # ----------------------------------------------------------- chat templates
+    def generate_chat_template(self, manifest_json: "str | None" = None) -> str:
+        """Synthesize this mind's OWN llama.cpp chat template from its live
+        state — thinking switch/level/ceiling, capabilities, tools, name and
+        description go into a provenance comment (renders nothing,
+        extractable from GET /props next to the manifest), and the format
+        core gets only the branches this mind needs: a tools block exists
+        only for minds with the tools capability, and the assistant cue
+        carries the Qwen3 ``enable_thinking`` kwarg handling only for minds
+        that can think. Deterministic; rendered by the built-in engine
+        (:meth:`apply_chat_template` defaults to exactly this), accepted by
+        llama.cpp's minja, and embedded into the GGUF by the exporter after
+        a render self-verification. Pass ``manifest_json`` (the escaped
+        capability-manifest JSON) to also embed the ``set`` line the exported
+        file carries."""
+        return generate_chat_template(self, manifest_json)
+
+    def apply_chat_template(self,
+                            messages: "List[Dict[str, Any] | tuple]",
+                            template: "str | None" = None,
+                            tools: "List[Dict[str, Any]] | None" = None,
+                            add_generation_prompt: bool = False,
+                            **kwargs: Any) -> str:
+        """Render a conversation through a Jinja chat template — the same
+        templates llama.cpp serves with ``--jinja`` (ChatML, Qwen3,
+        Llama-3.1, Zephyr, the mind's own exported one), rendered by the
+        built-in engine (:mod:`cognify.core.jinja`, a minja-compatible
+        subset — no external dependency).
+
+        ``messages`` are ``{"role": ..., "content": ...}`` dicts (or
+        ``(role, content)`` tuples, normalized). ``template=None`` uses the
+        mind's own format — the one the GGUF exporter embeds, minus the
+        manifest line (that rides in the exported file for GET /props).
+        Extra keyword arguments become template variables, so Qwen3's
+        ``enable_thinking=False`` drops the thinking cue; ``bos_token`` /
+        ``eos_token`` default to the mind's special tokens like llama-server
+        does. Returns the full prompt string; thinking-tagged content in
+        messages stays the caller's business, exactly as in llama.cpp.
+        """
+        normalized: List[Dict[str, Any]] = []
+        for message in messages:
+            if isinstance(message, dict):
+                normalized.append(dict(message))
+            else:
+                role, content = message
+                normalized.append({"role": role, "content": content})
+        if template is None:
+            template = self.generate_chat_template()
+        variables: Dict[str, Any] = dict(kwargs)
+        variables.setdefault("messages", normalized)
+        variables.setdefault("bos_token", "<bos>")
+        variables.setdefault("eos_token", "<eos>")
+        variables["add_generation_prompt"] = bool(add_generation_prompt)
+        if tools is not None:
+            variables["tools"] = tools
+        return render(template, variables)
+
     # ------------------------------------------------------------------ gender
     @property
     def gender_identity(self) -> str:
@@ -1027,8 +1250,10 @@ class Mind:
         if not self.gender.is_unset:
             data["gender"] = self.gender.to_dict()
         # Developer-facing options persist with the mind, so a restored mind
-        # keeps its thinking level, tone and presentation switches.
+        # keeps its thinking level, tone and presentation switches — and the
+        # reasoning level/trace budget that lines up with them.
         data["thinking_options"] = self.thinking_options.to_dict()
+        data["reasoning_options"] = self.reasoning_options.to_dict()
         data["expression"] = self.expression.to_dict()
         data["conversational"] = self.conversational.to_dict()
         data["web"] = {"allow": self.allow_web_search,
@@ -1069,6 +1294,7 @@ class Mind:
         mind.phrases.restore(data.get("sayings", []))
         mind.gender = GenderOptions.from_dict(data.get("gender"))
         mind.thinking_options = ThinkingOptions.from_dict(data.get("thinking_options"))
+        mind.reasoning_options = ReasoningOptions.from_dict(data.get("reasoning_options"))
         mind.expression = ExpressionOptions.from_dict(data.get("expression"))
         mind.composer.expression = mind.expression
         mind.conversational = ConversationalOptions.from_dict(

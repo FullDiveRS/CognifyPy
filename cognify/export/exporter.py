@@ -30,7 +30,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, NamedTuple, Optional, TYPE_CHECKING
 
 from .gguf import GgufValueType, GgufWriter, TensorSpec, read_gguf
 from .diagnostics import diagnose_gguf
@@ -39,7 +39,10 @@ from .safetensors import (SafetensorsExportResult, SafetensorsWriter, distribute
 from . import tokenizer as tokenizer_export
 from . import llamacpp
 from .options import ExportOptions
-from ..core.options import ThinkingCeiling, ThinkingLevel
+from ..core.jinja import (TEMPLATE_GENERATOR, cognify_chat_template,
+                          generate_chat_template, render)
+from ..core.options import (ReasoningCeiling, ThinkingCeiling, ThinkingLevel,
+                            effort_name)
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..core.mind import Mind
@@ -129,19 +132,84 @@ class LlamaCppGgufResult:
 _GPT2_PREFIX = "cognify.transformer."
 _TOKEN_NORMAL, _TOKEN_UNKNOWN, _TOKEN_CONTROL = 1, 2, 3
 
+def _effort_levels(ceiling: Any) -> List[str]:
+    """The effort levels this mind implements, lowest→highest, cut at the
+    ceiling — the same shape as llama.cpp's
+    ``chat_template_caps.reasoning_effort_levels`` in GET /props. Works for
+    the thinking AND the reasoning ceiling; order by the ladder, not the
+    string values (``"high" < `` ``"low"`` as strings)."""
+    top = ceiling.max_level()
+    order = list(type(top))
+    return [effort_name(m) for m in order[:order.index(top) + 1]]
+
+
+def _budget_ladder(options: Any) -> Dict[str, int]:
+    """The token budget each implemented level buys — the ladder a client
+    needs to reproduce the mind's effort levels with llama.cpp's
+    ``--reasoning-budget`` semantics (N>0 = token cap per cycle). Works for
+    ThinkingOptions and ReasoningOptions alike."""
+    top = options.ceiling.max_level()
+    order = list(type(top))
+    return {effort_name(m): options.tokens_for(m)
+            for m in order[:order.index(top) + 1]}
+
+
+class SamplingProfile(NamedTuple):
+    """A serving-stack sampling profile shipped as GGUF metadata
+    (``cognify.sampling.*``)."""
+    temperature: float
+    top_p: float
+    top_k: int
+    repeat_penalty: float
+    max_tokens: int
+
+
+def sampling_for(vocab_size: int) -> SamplingProfile:
+    """The sampling settings this model needs to produce clean output —
+    sized to the vocabulary, because a word-level model trained on a small
+    corpus degenerates into "what you is what you" loops at hot
+    temperatures with no repetition penalty, and has no learned sense of
+    when to stop:
+
+    * < 1k vocab pieces (greeting / toy scale): temp 0.7, repeat penalty
+      1.20, 128 max tokens.
+    * < 32k pieces (small chat model): temp 0.7, repeat penalty 1.15,
+      256 max tokens.
+    * anything bigger: temp 0.8, repeat penalty 1.10, 512 max tokens.
+
+    Top-k 40 / top-p 0.9 everywhere — wide enough for variety, narrow
+    enough to keep the sampling out of the long tail. A serving stack can
+    adopt the exported profile instead of guessing (Unsloth: set the same
+    values in its sampling panel)."""
+    if vocab_size < 1_000:
+        return SamplingProfile(0.7, 0.9, 40, 1.20, 128)
+    if vocab_size < 32_768:
+        return SamplingProfile(0.7, 0.9, 40, 1.15, 256)
+    return SamplingProfile(0.8, 0.9, 40, 1.10, 512)
+
+
+def _verify_generated_template(template: str, thinking_enabled: bool) -> None:
+    """Export self-verification: the GENERATED chat template must render the
+    mind's own format through the built-in engine byte-exactly before it is
+    written into a GGUF — a manifest `set` or provenance comment that leaks
+    into the render, or a broken tools/thinking branch, aborts the export."""
+    expected = ("user: hello\nassistant: thought:" if thinking_enabled
+                else "user: hello\nassistant:")
+    rendered = render(template, {"messages": [{"role": "user",
+                                               "content": "hello"}]})
+    if rendered != expected:
+        raise RuntimeError(
+            "generated chat template failed export self-verification: "
+            f"expected {expected!r}, got {rendered!r}")
+
+
 def _chat_template(manifest_json: str, thinking_enabled: bool) -> str:
-    """Minimal Jinja chat template — llama.cpp's minja and Unsloth render it
-    when the file is served with --jinja: the capability manifest rides as a
-    Jinja `set` (no render output, extractable from /props), an optional
-    OpenAI-style tools block (rendered as JSON via tojson), then "role:
-    content" lines. Thinking minds honor Qwen3's ``enable_thinking`` kwarg
-    (sent as ``chat_template_kwargs`` by UIs): false drops the "thought:" cue."""
-    tail = ("{%- if enable_thinking is defined and not enable_thinking %}assistant:"
-            "{% else %}assistant: thought:{% endif %}" if thinking_enabled else "assistant:")
-    return ("{%- set cognify_manifest = '" + manifest_json + "' %}\n"
-            "{%- if tools %}tools: {{ tools | tojson }}\n"
-            "{% endif %}{% for m in messages %}{{ m['role'] }}: {{ m['content'] }}\n"
-            "{% endfor %}" + tail)
+    """The mind's llama.cpp chat template, straight from the shared emitter
+    in :mod:`cognify.core.jinja` (the built-in engine renders it too — same
+    module, so exported file and runtime format cannot drift). The capability
+    manifest rides as a Jinja `set` (no render output, extractable from
+    /props); thinking minds honor Qwen3's ``enable_thinking`` kwarg."""
+    return cognify_chat_template(manifest_json, thinking_enabled)
 
 _SPECIAL_TOKENS = ("<pad>", "<unk>", "<bos>", "<eos>")
 
@@ -251,6 +319,8 @@ def export_gguf_llama_cpp(mind: "Mind", path: str,
     by_name = {t.name: t for t in extract_transformer_tensors(mind)}
 
     dim, layers, heads = cfg.dim, cfg.layers, cfg.heads
+    loop = max(1, cfg.loop)
+    physical_layers = layers * loop   # Loop Transformer: unrolled for llama.cpp
     wte = by_name[f"{_GPT2_PREFIX}wte"]
     wpe = by_name[f"{_GPT2_PREFIX}wpe"]
     vocab_size = wte.shape[0]
@@ -285,7 +355,7 @@ def export_gguf_llama_cpp(mind: "Mind", path: str,
 
     writer.add_uint32("gpt2.context_length", context)
     writer.add_uint32("gpt2.embedding_length", dim)
-    writer.add_uint32("gpt2.block_count", layers)
+    writer.add_uint32("gpt2.block_count", physical_layers)
     writer.add_uint32("gpt2.feed_forward_length", ffn)
     writer.add_uint32("gpt2.attention.head_count", heads)
     writer.add_float32("gpt2.attention.layer_norm_epsilon", 1e-5)
@@ -331,8 +401,10 @@ def export_gguf_llama_cpp(mind: "Mind", path: str,
         "media_generation": "media_generation" in caps,
         "tools": "tool_use" in caps,
         # Reasoning / memory / emotions are built into the CognifyPy core
-        # (always present, not pluggable capabilities).
-        "reasoning": mind.engine is not None,
+        # (not pluggable capabilities) — but reasoning RUNS only when its
+        # flag is on, and that is what serving stacks must see (same truth
+        # as the cognify.reasoning.* KV keys and the cycle itself).
+        "reasoning": bool(mind.flags.get("reasoning", True)),
         "memory": mind.kb is not None,
         "emotions": mind.emotions is not None,
         "web_search": bool(mind.allow_web_search),
@@ -344,8 +416,24 @@ def export_gguf_llama_cpp(mind: "Mind", path: str,
         "description": getattr(mind, "description", "") or "",
         "thinking": {
             "enabled": bool(mind.thinking_options.enabled),
-            "level": ThinkingLevel.parse(mind.thinking_options.level).value,
+            "level": effort_name(mind.thinking_options.level),
             "ceiling": ThinkingCeiling.parse(mind.thinking_options.ceiling).value,
+            # The effort ladder this mind implements (lowest→highest, the
+            # level names llama.cpp's --reasoning-effort expects) and the
+            # token budget each level buys — clients can implement the
+            # levels directly from /props.
+            "levels": _effort_levels(mind.thinking_options.ceiling),
+            "budget": mind.thinking_options.tokens_for(mind.thinking_options.level),
+            "budgets": _budget_ladder(mind.thinking_options),
+        },
+        "reasoning": {
+            "enabled": bool(mind.flags.get("reasoning", True)
+                            and mind.reasoning_options.enabled),
+            "level": effort_name(mind.reasoning_options.level),
+            "ceiling": ReasoningCeiling.parse(mind.reasoning_options.ceiling).value,
+            "levels": _effort_levels(mind.reasoning_options.ceiling),
+            "budget": mind.reasoning_options.tokens_for(mind.reasoning_options.level),
+            "budgets": _budget_ladder(mind.reasoning_options),
         },
         "capabilities": capabilities,
         "tools": {"enabled": capabilities["tools"],
@@ -361,21 +449,59 @@ def export_gguf_llama_cpp(mind: "Mind", path: str,
     # (renders no output): llama-server exposes the template via GET /props,
     # so any client — cognify-chat.html, an agent harness, Unsloth-style UIs —
     # can read what this mind carries and gray out what is missing. Single
-    # source of truth with the KV keys above.
-    writer.add_string("tokenizer.chat_template", _chat_template(
-        json.dumps(manifest).replace("'", "\\u0027"),
-        bool(mind.thinking_options.enabled)))
+    # source of truth with the KV keys above. The template itself is
+    # GENERATED from the mind's live state (see Mind.generate_chat_template)
+    # and self-verified against the built-in engine before it ships: a
+    # template that cannot render the mind's own format never reaches a GGUF.
+    template = mind.generate_chat_template(
+        json.dumps(manifest).replace("'", "\\u0027"))
+    _verify_generated_template(template, bool(mind.thinking_options.enabled))
+    writer.add_string("cognify.chat_template.generator", TEMPLATE_GENERATOR)
+    writer.add_string("tokenizer.chat_template", template)
 
-    # Identity metadata — travels with the runnable weights.
+    # Identity metadata — travels with the runnable weights. Level names
+    # follow llama.cpp's --reasoning-effort ladder (low, medium, high,
+    # xhigh, max) so serving stacks can map them 1:1.
     writer.add_bool("cognify.thinking.enabled", bool(mind.thinking_options.enabled))
-    writer.add_string("cognify.thinking.level", ThinkingLevel.parse(mind.thinking_options.level).value)
+    writer.add_string("cognify.thinking.level", effort_name(mind.thinking_options.level))
     writer.add_string("cognify.thinking.ceiling", ThinkingCeiling.parse(mind.thinking_options.ceiling).value)
+    writer.add_uint32("cognify.thinking.budget",
+                      mind.thinking_options.tokens_for(mind.thinking_options.level))
+    writer.add_bool("cognify.reasoning.enabled", bool(mind.flags.get("reasoning", True)
+                                                     and mind.reasoning_options.enabled))
+    writer.add_string("cognify.reasoning.level", effort_name(mind.reasoning_options.level))
+    writer.add_string("cognify.reasoning.ceiling",
+                      ReasoningCeiling.parse(mind.reasoning_options.ceiling).value)
+    writer.add_uint32("cognify.reasoning.budget",
+                      mind.reasoning_options.tokens_for(mind.reasoning_options.level))
+
+    # Recommended sampling profile — sized to the vocabulary. Tiny word-level
+    # models degenerate into "what you is what you" loops at hot temperatures
+    # with no repetition penalty, and have no learned sense of when to stop,
+    # so the profile caps the reply and tames the sampling. Serving stacks
+    # can read these keys instead of guessing (Unsloth: set the same values
+    # in its sampling panel).
+    profile = sampling_for(int(vocab_size))
+    writer.add_float32("cognify.sampling.temperature", profile.temperature)
+    writer.add_float32("cognify.sampling.top_p", profile.top_p)
+    writer.add_uint32("cognify.sampling.top_k", profile.top_k)
+    writer.add_float32("cognify.sampling.repeat_penalty", profile.repeat_penalty)
+    writer.add_uint32("cognify.sampling.max_tokens", profile.max_tokens)
     writer.add_uint32("cognify.cycles", mind.cycle_count)
+    # Loop Transformer provenance: the runtime runs ONE stack `loop` times
+    # (weight-tied); the GGUF materializes layers × loop physical blocks (an
+    # unrolled model computes exactly the same function, and llama.cpp has no
+    # weight tying across blocks). `layers` records the logical stack.
+    writer.add_uint32("cognify.transformer.layers", layers)
+    writer.add_uint32("cognify.transformer.loop", loop)
 
     writer.add_tensor(TensorSpec("token_embd.weight", wte.data, *wte.shape))
     writer.add_tensor(TensorSpec("position_embd.weight", wpe_data, *wpe_shape))
-    for l in range(layers):
-        p = f"{_GPT2_PREFIX}l{l}."
+    for l in range(physical_layers):
+        # Unroll: physical layer l carries the weights of logical block
+        # (l % layers) — every application of the looped stack becomes its
+        # own block in the GGUF.
+        p = f"{_GPT2_PREFIX}l{l % layers}."
         writer.add_tensor(TensorSpec(f"blk.{l}.attn_norm.weight", by_name[f"{p}ln1.g"].data, dim))
         writer.add_tensor(TensorSpec(f"blk.{l}.attn_norm.bias", by_name[f"{p}ln1.b"].data, dim))
         wq, wk, wv = (by_name[f"{p}attn.w{k}"] for k in "qkv")
@@ -425,7 +551,7 @@ def export_gguf_llama_cpp(mind: "Mind", path: str,
 
     return LlamaCppGgufResult(
         path=str(full), tensor_count=writer.tensor_count, vocab_size=vocab_size,
-        dim=dim, heads=heads, layers=layers, context_length=context,
+        dim=dim, heads=heads, layers=physical_layers, context_length=context,
         feed_forward_length=ffn, file_length=full.stat().st_size)
 
 
@@ -451,13 +577,21 @@ def build_gguf(mind: "Mind", options: ExportOptions,
     writer.add_bool("cognify.has_learning", mind.learner is not None)
     writer.add_uint32("cognify.capability_count", len(mind.capabilities))
 
-    # Thinking budget metadata — travels with the weights so serving stacks
-    # (llama.cpp / Unsloth) know this model's thinking switch, its operating
-    # level and the hard cap it was built with.
+    # Thinking + reasoning budget metadata — travels with the weights so
+    # serving stacks (llama.cpp / Unsloth) know this model's switches, its
+    # operating levels (llama.cpp effort names) and the hard caps it was
+    # built with.
     _t = mind.thinking_options
     writer.add_bool("cognify.thinking.enabled", bool(_t.enabled))
-    writer.add_string("cognify.thinking.level", ThinkingLevel.parse(_t.level).value)
+    writer.add_string("cognify.thinking.level", effort_name(_t.level))
     writer.add_string("cognify.thinking.ceiling", ThinkingCeiling.parse(_t.ceiling).value)
+    writer.add_uint32("cognify.thinking.budget", _t.tokens_for(_t.level))
+    _r = mind.reasoning_options
+    writer.add_bool("cognify.reasoning.enabled", bool(mind.flags.get("reasoning", True)
+                                                      and _r.enabled))
+    writer.add_string("cognify.reasoning.level", effort_name(_r.level))
+    writer.add_string("cognify.reasoning.ceiling", ReasoningCeiling.parse(_r.ceiling).value)
+    writer.add_uint32("cognify.reasoning.budget", _r.tokens_for(_r.level))
 
     p = mind.personality
     writer.add_float32("cognify.personality.openness", p.openness)
