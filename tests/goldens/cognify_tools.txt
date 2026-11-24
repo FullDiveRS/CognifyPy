@@ -1,0 +1,3 @@
+tools: [{"description":"tells the time","name":"clock"}]
+user: hello
+assistant: thought:

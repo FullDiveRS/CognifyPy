@@ -314,7 +314,9 @@ class TestLlamaCppGguf:
         cap_names = [c.name for c in mind.capabilities]
         assert gguf.metadata["cognify.modules"] == cap_names
         assert gguf.metadata["cognify.tools.enabled"]              # with_tools() above
-        assert gguf.metadata["cognify.reasoning.enabled"]          # core built-ins
+        # reasoning now reports the CYCLE truth (the flag): this mind was
+        # built .only("thinking", "memory"), so reasoning is off.
+        assert not gguf.metadata["cognify.reasoning.enabled"]
         assert gguf.metadata["cognify.memory.enabled"]
         assert not gguf.metadata["cognify.audio.enabled"]          # never attached
         assert gguf.metadata["cognify.web_search.enabled"] == bool(mind.allow_web_search)
@@ -592,3 +594,31 @@ class TestGgufDiagnostics:
         assert not report.spec_valid
         assert not report.loadable_by_stock_llama_cpp
         assert any("past the end" in issue for issue in report.issues)
+
+
+class TestLlamaCppLoopTransformer:
+    """The Loop Transformer export: the GGUF unrolls layers × loop physical
+    blocks (an unrolled model computes exactly the same function, and
+    llama.cpp has no weight tying across blocks)."""
+
+    def test_llamacpp_unrolls_the_loop(self, tmp_path):
+        from dataclasses import replace
+        mind = MindBuilder("Looped").with_transformer(
+            lambda c: replace(c, layers=1, loop=2)).build()
+        corpus = tmp_path / "corpus.txt"
+        corpus.write_text("\n".join(
+            ["the cat sat on the mat", "the dog sat on the rug"] * 3) + "\n",
+            encoding="utf-8")
+        mind.train_file(str(corpus))
+        mind.train_deep_model(epochs=1)
+        path = tmp_path / "looped.gguf"
+        result = export_gguf_llama_cpp(mind, str(path))
+        assert result.layers == 2   # physical blocks: 1 logical × 2 loop
+
+        gguf = read_gguf(str(path))
+        assert gguf.metadata["gpt2.block_count"] == 2
+        assert gguf.metadata["cognify.transformer.layers"] == 1
+        assert gguf.metadata["cognify.transformer.loop"] == 2
+        # Unrolled weights: physical layer 1 carries logical block 0's tensors.
+        assert (gguf.read_tensor("blk.0.attn_norm.weight")
+                == gguf.read_tensor("blk.1.attn_norm.weight"))

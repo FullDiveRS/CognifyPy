@@ -16,7 +16,7 @@ Mirrors the C# ``ThinkingOptions`` / ``ExpressionOptions``:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -56,6 +56,14 @@ _LEVEL_ROUNDS: Dict[ThinkingLevel, int] = {
     ThinkingLevel.HIGH: 4,
     ThinkingLevel.VERY_HIGH: 6,
     ThinkingLevel.MAX: 8,
+}
+
+# The classic default thinking-token ladder per level: budget/50 gives the
+# thought counts above (1/2/4/6/8). Developers override individual rungs via
+# ``ThinkingOptions.budget(level, tokens)`` / ``mind.set_thinking_budget``;
+# a global ``thought_budget`` overrides the whole ladder.
+DEFAULT_LEVEL_BUDGETS: Dict[str, int] = {
+    "low": 50, "medium": 100, "high": 200, "veryhigh": 300, "max": 400,
 }
 
 
@@ -118,6 +126,99 @@ class ThinkingCeiling(str, Enum):
         return level if order.index(level) <= order.index(top) else top
 
 
+class ReasoningLevel(str, Enum):
+    """How hard the mind reasons — the reasoning phase's OWN ladder,
+    mirroring :class:`ThinkingLevel` rung for rung (``low`` … ``max``) so
+    the two modules line up level for level while each keeps its own type.
+    The level sizes the forward-chaining depth (:data:`DEPTH_FOR`) and the
+    explanation-trace budget (:meth:`ReasoningOptions.tokens_for`)."""
+
+    LOW = "low"                # a quick check — shallow chaining (2 passes)
+    MEDIUM = "medium"          # the default: the historical depth (6 passes)
+    HIGH = "high"              # a real deduction (8 passes)
+    VERY_HIGH = "veryhigh"     # deep chaining (10 passes)
+    MAX = "max"                # maximum chaining (12 passes)
+
+    @classmethod
+    def parse(cls, value: "ReasoningLevel | str | None") -> "ReasoningLevel":
+        """Accepts the enum, ``"veryhigh"``, ``"very_high"``, ``"very high"``
+        (case-insensitive); unknown values fall back to MEDIUM."""
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, str):
+            key = value.strip().lower().replace("-", "").replace("_", "").replace(" ", "")
+            for member in cls:
+                if member.value == key:
+                    return member
+        return cls.MEDIUM
+
+    @classmethod
+    def from_thinking(cls, level: "ThinkingLevel | str") -> "ReasoningLevel":
+        """Maps a thinking level onto reasoning's own ladder (same rung —
+        one cognitive level drives both modules)."""
+        return cls.parse(ThinkingLevel.parse(level).value)
+
+    def to_thinking(self) -> ThinkingLevel:
+        """Maps onto the thinking ladder (same rung)."""
+        return ThinkingLevel.parse(self.value)
+
+
+class ReasoningCeiling(str, Enum):
+    """How far the mind is ALLOWED to reason — the reasoning mirror of
+    :class:`ThinkingCeiling`: a hard cap the model builder sets at build
+    time, with the same five presets (``ONLY1`` = Low only … ``ONLY5`` =
+    everything, the default). A level requested above the ceiling is
+    silently clamped DOWN to the ceiling's top level, and the cap travels
+    with the model into exported files (``cognify.reasoning.ceiling`` GGUF
+    metadata) so serving stacks can read it too."""
+
+    ONLY1 = "only1"    # Low only
+    ONLY2 = "only2"    # Low, Medium
+    ONLY3 = "only3"    # Low, Medium, High
+    ONLY4 = "only4"    # Low, Medium, High, Very High
+    ONLY5 = "only5"    # Low, Medium, High, Very High, Max — no cap
+
+    @classmethod
+    def parse(cls, value: "ReasoningCeiling | str | None") -> "ReasoningCeiling":
+        """Accepts the enum, ``"only3"``, ``"3"`` (case-insensitive); unknown
+        values fall back to ONLY5 (no cap)."""
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, str):
+            key = value.strip().lower().replace("-", "").replace("_", "").replace(" ", "")
+            if key.startswith("only"):
+                key = key[4:]
+            if key.isdigit() and 1 <= int(key) <= 5:
+                return cls(f"only{int(key)}")
+            try:
+                return cls(key)
+            except ValueError:
+                pass
+        return cls.ONLY5
+
+    def max_level(self) -> ReasoningLevel:
+        """The highest :class:`ReasoningLevel` this ceiling allows."""
+        return {
+            ReasoningCeiling.ONLY1: ReasoningLevel.LOW,
+            ReasoningCeiling.ONLY2: ReasoningLevel.MEDIUM,
+            ReasoningCeiling.ONLY3: ReasoningLevel.HIGH,
+            ReasoningCeiling.ONLY4: ReasoningLevel.VERY_HIGH,
+        }.get(self, ReasoningLevel.MAX)
+
+    def clamp(self, level: ReasoningLevel) -> ReasoningLevel:
+        """Clamps a requested level down to the ceiling: at-or-below passes
+        through untouched, anything above lands on the ceiling's top level."""
+        top = self.max_level()
+        order = list(ReasoningLevel)
+        return level if order.index(level) <= order.index(top) else top
+
+    @classmethod
+    def from_thinking(cls, ceiling: "ThinkingCeiling | str") -> "ReasoningCeiling":
+        """Maps a thinking ceiling onto reasoning's own ceiling (same
+        preset — one cognitive-level call caps both modules)."""
+        return cls.parse(ThinkingCeiling.parse(ceiling).value)
+
+
 @dataclass
 class ThinkingOptions:
     """Options for the thinking module — the thought generator's settings.
@@ -136,6 +237,18 @@ class ThinkingOptions:
     ceiling: ThinkingCeiling = ThinkingCeiling.ONLY5
     tone: str = "balanced"
     thought_budget: int = 0
+
+    # THINKING TOKEN BUDGETS PER LEVEL — how many tokens each level may
+    # spend, the ladder from Low up to Max (or up to the ceiling's top
+    # level: every read clamps the level first, and writes clamp too, so a
+    # Max budget on an Only2 model lands on Medium). Defaults reproduce the
+    # classic ladder (50/100/200/300/400). Keys are level VALUE strings
+    # ("low".."max") so they serialize to JSON as-is. With ``automatic`` on,
+    # the resolver only picks the LEVEL — the chosen level's budget then
+    # sizes the thoughts, which is why a global ``thought_budget`` suppresses
+    # the choice while these do not.
+    level_budgets: Dict[str, int] = field(
+        default_factory=lambda: dict(DEFAULT_LEVEL_BUDGETS))
 
     # -- fluent setters (chainable, like the C# versions) --------------------
     def enable(self, value: bool) -> "ThinkingOptions":
@@ -158,9 +271,37 @@ class ThinkingOptions:
         self.tone = (tone or "balanced").strip().lower() or "balanced"
         return self
 
-    def budget(self, tokens: int) -> "ThinkingOptions":
-        self.thought_budget = max(0, int(tokens))
+    def budget(self, tokens: int, level: "ThinkingLevel | str | None" = None) -> "ThinkingOptions":
+        """Sets a thinking TOKEN budget. One argument: ONE global budget for
+        every level (overrides the ladder and the automatic choice — the
+        developer named the exact budget). Two arguments
+        ``budget(tokens, level)``: the budget for ONE level — the ladder
+        from Low up to Max, or up to the ceiling's top level when a clamp is
+        set (the level is clamped at write time). ``tokens <= 0`` removes
+        that level's custom entry, falling back to the default ladder.
+        """
+        if level is None:
+            self.thought_budget = max(0, int(tokens))
+            return self
+        key = ThinkingLevel.parse(level).value
+        clamped = self.ceiling.clamp(ThinkingLevel.parse(level)).value
+        if int(tokens) <= 0:
+            self.level_budgets.pop(clamped, None)
+        else:
+            self.level_budgets[clamped] = int(tokens)
+        del key
         return self
+
+    def tokens_for(self, level: "ThinkingLevel | str") -> int:
+        """The thinking tokens the given level may spend right now: a global
+        ``thought_budget`` wins; otherwise the level (clamped by the ceiling)
+        is looked up in ``level_budgets``, falling back to the default
+        ladder for removed entries."""
+        if self.thought_budget > 0:
+            return int(self.thought_budget)
+        key = self.ceiling.clamp(ThinkingLevel.parse(level)).value
+        tokens = self.level_budgets.get(key, 0)
+        return int(tokens) if tokens > 0 else DEFAULT_LEVEL_BUDGETS[key]
 
     # THINKING AUTOMATIC — the mind chooses how much to think about each
     # topic or conversation itself. When True, ``level`` becomes the BASE
@@ -183,6 +324,7 @@ class ThinkingOptions:
         shared configuration object."""
         import copy
         copied = copy.copy(self)
+        copied.level_budgets = dict(self.level_budgets)
         return copied.at(level)
 
     @property
@@ -190,12 +332,13 @@ class ThinkingOptions:
         """Generated-thought count for the current level/budget (1..10)."""
         if self.thought_budget > 0:
             return max(1, min(10, int(self.thought_budget) // 50))
-        return _LEVEL_ROUNDS[self.ceiling.clamp(ThinkingLevel.parse(self.level))]
+        return max(1, min(10, self.tokens_for(self.level) // 50))
 
     def to_dict(self) -> Dict[str, Any]:
         return {"enabled": self.enabled, "level": ThinkingLevel.parse(self.level).value,
                 "ceiling": ThinkingCeiling.parse(self.ceiling).value,
                 "tone": self.tone, "thought_budget": int(self.thought_budget),
+                "level_budgets": dict(self.level_budgets or {}),
                 "automatic": bool(self.automatic)}
 
     @classmethod
@@ -212,8 +355,193 @@ class ThinkingOptions:
             opts.tone = str(data["tone"])
         if data.get("thought_budget"):
             opts.thought_budget = max(0, int(data["thought_budget"]))
+        if data.get("level_budgets"):
+            for key, tokens in dict(data["level_budgets"]).items():
+                norm = str(key).lower().replace("_", "").replace(" ", "")
+                if norm in DEFAULT_LEVEL_BUDGETS and int(tokens) > 0:
+                    opts.level_budgets[norm] = int(tokens)
         if "automatic" in data:
             opts.automatic = bool(data["automatic"])
+        return opts
+
+
+#: The forward-chaining depth a reasoning level buys: Low 2 … Medium 6 …
+#: Max 12 inference passes. Medium keeps the historical default of 6, so
+#: existing minds reason exactly as far as before; higher levels explore
+#: deeper. Keyed by ReasoningLevel — reasoning's own ladder, rung for rung
+#: identical to the thinking one.
+DEPTH_FOR: Dict[ReasoningLevel, int] = {
+    ReasoningLevel.LOW: 2,
+    ReasoningLevel.MEDIUM: 6,
+    ReasoningLevel.HIGH: 8,
+    ReasoningLevel.VERY_HIGH: 10,
+    ReasoningLevel.MAX: 12,
+}
+
+
+def effort_name(level: Any) -> str:
+    """The level name llama.cpp's ``--reasoning-effort`` ladder uses:
+    low / medium / high / xhigh / max. Accepts a ThinkingLevel or a
+    ReasoningLevel (the ladders share values); Cognify's VeryHigh maps to
+    ``xhigh`` so an exported level can be passed straight to the server."""
+    value = getattr(level, "value", level)
+    value = str(value).strip().lower()
+    return {"veryhigh": "xhigh"}.get(value, value)
+
+
+@dataclass
+class ReasoningOptions:
+    """Options for the reasoning phase — the knowledge/inference engine's
+    settings, on reasoning's OWN ladder (:class:`ReasoningLevel`,
+    :class:`ReasoningCeiling`) — rung for rung LINED UP WITH THINKING: the
+    same five levels, the same ceiling presets and the same default budgets
+    (50/100/200/300/400). One call (``MindBuilder.with_cognitive_level``)
+    sets the effort of both modules; each can also be leveled
+    independently. The level sizes the forward-chaining depth
+    (:data:`DEPTH_FOR`) and the explanation-trace budget
+    (:meth:`tokens_for`).
+    """
+
+    level: ReasoningLevel = ReasoningLevel.MEDIUM
+    ceiling: ReasoningCeiling = ReasoningCeiling.ONLY5
+
+    # The mind's own reasoning switch — can this model chain inferences at
+    # all? False short-circuits the reasoning phase: facts already learned
+    # stay queryable, but no new deduction / induction / abduction runs.
+    # Mirrors the builder's with_reasoning(..., enabled=False) but stays
+    # changeable at runtime — the GGUF exporter reads it for
+    # cognify.reasoning.enabled, the same way it reads thinking's.
+    enabled: bool = True
+
+    # Explicit reasoning token budget overriding everything when > 0: the
+    # token ceiling for the reasoning trace (learned-fact, arithmetic,
+    # inference and induction explanations) in ONE cycle. One budget for
+    # every level; for a per-level ladder use budget(tokens, level).
+    token_budget: int = 0
+
+    # Forward-chaining depth (inference passes). Sized by the level ladder
+    # unless depth() pinned an explicit value.
+    max_inference_depth: int = 6
+    depth_is_custom: bool = False
+
+    # Unsupervised induction of new facts from repeated co-occurrence, and
+    # the observations required before a fact is induced (historical
+    # default 3 on this side).
+    allow_induction: bool = True
+    induction_threshold: int = 3
+
+    # Per-level trace budget ladder — same numbers as thinking by default.
+    # Keys are level VALUE strings ("low".."max") so they serialize as-is.
+    level_budgets: Dict[str, int] = field(
+        default_factory=lambda: dict(DEFAULT_LEVEL_BUDGETS))
+
+    # -- fluent setters (chainable, like the C# versions) --------------------
+
+    def enable(self, value: bool) -> "ReasoningOptions":
+        """Flips the reasoning switch — the same switch thinking's
+        ``enable()`` flips, on reasoning's own side."""
+        self.enabled = bool(value)
+        return self
+
+    def depth(self, passes: int) -> "ReasoningOptions":
+        """Pins an explicit forward-chaining depth (1..32) — the level
+        ladder then stops retuning it. Serialized with the config so saved
+        minds keep the pin."""
+        self.max_inference_depth = max(1, min(32, int(passes)))
+        self.depth_is_custom = True
+        return self
+
+    def up_to(self, ceiling: "ReasoningCeiling | str") -> "ReasoningOptions":
+        """Caps how far this model may ever reason; the level is re-clamped
+        immediately (mirror of ThinkingOptions.up_to)."""
+        self.ceiling = ReasoningCeiling.parse(ceiling)
+        self.level = self.ceiling.clamp(self.level)
+        return self
+
+    def at(self, level: "ReasoningLevel | str") -> "ReasoningOptions":
+        """Sets the reasoning level — clamped by the ceiling. Re-sizes the
+        inference depth from the level ladder unless depth() pinned one;
+        the trace budget follows through tokens_for() at use time."""
+        self.level = self.ceiling.clamp(ReasoningLevel.parse(level))
+        if not self.depth_is_custom:
+            self.max_inference_depth = DEPTH_FOR[self.level]
+        return self
+
+    def budget(self, tokens: int,
+               level: "ReasoningLevel | str | None" = None) -> "ReasoningOptions":
+        """Sets a reasoning TOKEN budget. One argument: ONE global budget
+        for every level (overrides the ladder). Two arguments
+        ``budget(tokens, level)``: the budget for ONE level — the ladder
+        from Low up to Max, or up to the ceiling's top level when a clamp
+        is set (clamped at write time). ``tokens <= 0`` removes that
+        level's custom entry, falling back to the default ladder."""
+        if level is None:
+            self.token_budget = max(0, int(tokens))
+            return self
+        clamped = self.ceiling.clamp(ReasoningLevel.parse(level)).value
+        if int(tokens) <= 0:
+            self.level_budgets.pop(clamped, None)
+        else:
+            self.level_budgets[clamped] = int(tokens)
+        return self
+
+    def tokens_for(self, level: "ReasoningLevel | str") -> int:
+        """The reasoning tokens the given level may spend on its trace: a
+        global ``token_budget`` wins; otherwise the level (clamped by the
+        ceiling) is looked up in ``level_budgets``, falling back to the
+        default ladder. Same resolution rules as
+        ThinkingOptions.tokens_for, so the two modules line up level for
+        level."""
+        if self.token_budget > 0:
+            return int(self.token_budget)
+        key = self.ceiling.clamp(ReasoningLevel.parse(level)).value
+        tokens = self.level_budgets.get(key, 0)
+        return int(tokens) if tokens > 0 else DEFAULT_LEVEL_BUDGETS[key]
+
+    @property
+    def effective_depth(self) -> int:
+        """The depth the next cycle will chain: an explicit depth() wins,
+        otherwise the level ladder (DEPTH_FOR) sizes it."""
+        if self.depth_is_custom:
+            return int(self.max_inference_depth)
+        return DEPTH_FOR[ReasoningLevel.parse(self.level)]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"enabled": bool(self.enabled),
+                "level": ReasoningLevel.parse(self.level).value,
+                "ceiling": ReasoningCeiling.parse(self.ceiling).value,
+                "token_budget": int(self.token_budget),
+                "max_inference_depth": int(self.max_inference_depth),
+                "depth_is_custom": bool(self.depth_is_custom),
+                "allow_induction": bool(self.allow_induction),
+                "induction_threshold": int(self.induction_threshold),
+                "level_budgets": dict(self.level_budgets or {})}
+
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "ReasoningOptions":
+        data = data or {}
+        opts = cls()
+        if "enabled" in data:
+            opts.enabled = bool(data["enabled"])
+        if data.get("ceiling"):
+            opts.ceiling = ReasoningCeiling.parse(data["ceiling"])
+        if data.get("level"):
+            opts.level = opts.ceiling.clamp(ReasoningLevel.parse(data["level"]))
+        if data.get("token_budget"):
+            opts.token_budget = max(0, int(data["token_budget"]))
+        if data.get("max_inference_depth"):
+            opts.max_inference_depth = max(1, min(32, int(data["max_inference_depth"])))
+        if "depth_is_custom" in data:
+            opts.depth_is_custom = bool(data["depth_is_custom"])
+        if "allow_induction" in data:
+            opts.allow_induction = bool(data["allow_induction"])
+        if data.get("induction_threshold"):
+            opts.induction_threshold = int(data["induction_threshold"])
+        if data.get("level_budgets"):
+            for key, tokens in dict(data["level_budgets"]).items():
+                norm = str(key).lower().replace("_", "").replace(" ", "")
+                if norm in DEFAULT_LEVEL_BUDGETS and int(tokens) > 0:
+                    opts.level_budgets[norm] = int(tokens)
         return opts
 
 

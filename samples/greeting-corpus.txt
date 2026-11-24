@@ -1,0 +1,72 @@
+# greeting-corpus.txt — teach a Cognify mind conversation basics.
+#
+# The demo corpus (corpus-part*.txt) is a DICTIONARY: every line is
+# "Word means ...", and it contains no greetings at all — so a mind trained
+# only on it has never seen "hello" and answers with word salad. Feed this
+# file too, then deep-train, and greetings become speakable:
+#
+#     mind.train_file("greeting-corpus.txt")
+#     mind.train_deep_model(TransformerTrainOptions(epochs=12, decay=0.9))
+#
+# Plain sentences, one per line; blank lines and '#' comments are ignored.
+# Words repeat on purpose — a tiny word-level model learns by repetition.
+Hello is a warm word people say when they meet.
+When someone says hello, you say hello back.
+Hello means I am glad to see you.
+Say hello to greet a friend.
+Hello friend, welcome here.
+Hello is how a talk begins.
+Hi is a short way to say hello.
+Hi means hello.
+When someone says hi, you say hi back.
+Good morning is a hello for the start of the day.
+Good evening is a hello for the end of the day.
+A greeting is a hello or a hi.
+Greet a friend with hello.
+Welcome means I am glad you came.
+A welcome is what you say when someone arrives.
+Welcome friend, come in.
+When someone says hello, a kind answer is hello to you too.
+Talking starts when you say hello.
+Saying hello is friendly and polite.
+Hello there, it is good to see you.
+It is good to see you means welcome.
+Thank you is what you say when someone is kind.
+Please is a polite word when you ask for something.
+Sorry is what you say when you did something wrong.
+Goodbye is what you say when you leave.
+Goodbye means the talk is over.
+When someone says goodbye, you say goodbye back.
+See you later is a friendly goodbye.
+A friend is someone you like to talk with.
+Be kind when you talk.
+Be polite when you talk.
+A question is how you ask about something.
+An answer is what you say to a question.
+When someone asks a question, you try to answer.
+Listening means you pay attention to words.
+Pay attention when someone talks to you.
+A name is what people call you.
+My name tells who I am.
+I am glad when a friend says hello.
+Saying welcome makes a friend feel good.
+Talking with friends feels warm.
+A talk grows when you listen and answer.
+#
+# --- "how are you" exchanges -------------------------------------------
+# Without these lines a mind asked "how are you" has never seen the
+# phrase, so it recombines corpus words at random (word salad).
+How are you is a question a friend asks.
+How are you means I want to know how you feel.
+When someone asks how are you, you say I am doing well.
+When someone asks how are you, a kind answer is I am doing well.
+I am doing well means I feel good today.
+I am fine means I am doing well.
+How are you today?
+I am doing well today, thank you for asking.
+A friend asks how are you when they meet you.
+How are you is a hello that asks about feelings.
+When someone asks how are you, be kind and answer.
+An answer to how are you is I am well, thank you.
+You ask how are you, and the answer is I am doing well.
+When a friend says how are you, it is a kind hello.

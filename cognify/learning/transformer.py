@@ -51,6 +51,7 @@ class TransformerConfig:
     dim: int = 16
     heads: int = 2
     layers: int = 1
+    loop: int = 1
     context_len: int = 12
     ffn_mult: int = 2
     dropout: float = 0.1
@@ -66,6 +67,8 @@ class TransformerConfig:
             raise ValueError("transformer dimensions must be positive (context_len > 2)")
         if self.dim % self.heads != 0:
             raise ValueError(f"dim ({self.dim}) must be divisible by heads ({self.heads})")
+        if self.loop < 1 or self.loop > 8:
+            raise ValueError(f"loop ({self.loop}) must be between 1 and 8 (1 = classic architecture)")
 
 
 @dataclass
@@ -465,10 +468,14 @@ class TransformerLM:
         x0 = [[self._wte[tokens[p]][c] + self._wpe[p][c] for c in range(d)] for p in range(t)]
         layers: List[Dict[str, Any]] = []
         a = x0
-        for block in self._blocks:
-            lc: Dict[str, Any] = {"xin": a}
-            a = self._forward_block(block, lc, training)
-            layers.append(lc)
+        # Loop Transformer: the block stack runs cfg.loop times per pass —
+        # one cached activation set per APPLICATION (the backward pass needs
+        # every application), while the weights stay the shared stack's.
+        for _loop in range(self.cfg.loop):
+            for block in self._blocks:
+                lc: Dict[str, Any] = {"xin": a}
+                a = self._forward_block(block, lc, training)
+                layers.append(lc)
 
         lnf_out, lnf_hat, lnf_mean, lnf_inv = self._layer_norm(a, self._lnfg, self._lnfb)
         logits = [[sum(lnf_out[p][c] * self._wte[i][c] for c in range(d))
@@ -598,9 +605,14 @@ class TransformerLM:
         d_up = self._layer_norm_backward(d_lnf, lnf_hat, self._lnfg, lnf_inv,
                                          g["lnfg"], g["lnfb"])
 
-        for li in range(len(self._blocks) - 1, -1, -1):
-            d_up = self._backward_block(self._blocks[li], cache["layers"][li],
-                                        d_up, g["blocks"][li], g)
+        # One backward pass per APPLICATION (top-down): application li used
+        # block (li % block count), and every application's gradients
+        # accumulate into that block's shared slot — weight-tied depth.
+        block_count = len(self._blocks)
+        for li in range(len(cache["layers"]) - 1, -1, -1):
+            d_up = self._backward_block(self._blocks[li % block_count],
+                                        cache["layers"][li],
+                                        d_up, g["blocks"][li % block_count], g)
 
         for p in range(t):
             tok = cache["tokens"][p]
@@ -889,7 +901,15 @@ class TransformerLM:
 
     def generate(self, prompt: str, max_tokens: int = 12,
                  temperature: float = 0.8) -> str:
-        """Free-running continuation of the prompt (temperature sampling)."""
+        """Free-running continuation of the prompt (temperature sampling).
+
+        Samples the real word tokens PLUS the end token — the stop behavior
+        llama.cpp has (EOS is part of the distribution the model was trained
+        to predict at sentence ends), so a finished sentence can end itself
+        instead of always running to ``max_tokens``. A no-triple guard re-
+        samples away any token that would land three times in a row — the
+        one degenerate loop a tiny word-level model falls into; doubles stay
+        legal ("very very")."""
         if not self.is_trained:
             return ""
         ids = self._encode_context(prompt)
@@ -898,17 +918,20 @@ class TransformerLM:
             window = self._pad(ids)
             cache = self._forward(window, training=False)
             logits = cache["logits"][-1]
-            m = max(logits[_SPECIAL_COUNT:])
+            m = max(logits[_EOS_ID:])
             weights = [math.exp((logits[i] - m) / max(0.05, temperature))
-                       for i in range(_SPECIAL_COUNT, len(self._vocab))]
+                       for i in range(_EOS_ID, len(self._vocab))]
+            # No-triple guard: zero the token the last two already are.
+            if len(ids) >= 2 and ids[-1] == ids[-2]:
+                weights[ids[-1] - _EOS_ID] = 0.0
             total = sum(weights) or 1.0
             r = self._rng.random() * total
             acc = 0.0
-            chosen = _SPECIAL_COUNT
+            chosen = _EOS_ID
             for i, wgt in enumerate(weights):
                 acc += wgt
                 if r <= acc:
-                    chosen = _SPECIAL_COUNT + i
+                    chosen = _EOS_ID + i
                     break
             if chosen == _EOS_ID:
                 break
@@ -916,11 +939,47 @@ class TransformerLM:
             ids.append(chosen)
         return " ".join(produced)
 
+    def evaluate(self, lines) -> "tuple[float, int]":
+        """Scores lines WITHOUT touching the weights or the observation
+        buffer — the validation half of a train/validation split. Builds the
+        same next-token windows training does (every contiguous subsequence
+        of each line, left-padded with bos) and averages the SAME
+        cross-entropy the training loop minimizes (full softmax over the
+        vocabulary, every window position) on a forward-only pass, so the
+        number is directly comparable to the deep-training report's loss.
+        Returns (mean nats/token, positions scored); the loss is NaN when
+        the model is untrained or nothing was scoreable."""
+        if not lines or not self.is_trained:
+            return float("nan"), 0
+        nll_sum = 0.0
+        positions = 0
+        t = self.cfg.context_len
+        for line in lines:
+            if not line or not line.strip():
+                continue
+            ids = [_BOS_ID] + [self._encode_word(w) for w in self._tokenize(line)] + [_EOS_ID]
+            length = len(ids)
+            for st in range(length - 1):
+                max_e = min(length, st + 1 + t)
+                for e in range(st + 1, max_e):
+                    window_len = e - st
+                    pad = t - window_len
+                    x = [_BOS_ID] * pad + ids[st:e]
+                    probs = self._forward(x, training=False)["probs"]
+                    for p in range(t):
+                        y = x[p + 1] if p < t - 1 else ids[e]
+                        nll_sum -= math.log(max(probs[p][y], 1e-12))
+                        positions += 1
+        if positions == 0:
+            return float("nan"), 0
+        return nll_sum / positions, positions
+
     # ------------------------------------------------------------------ state
     def to_dict(self) -> dict:
         cfg = self.cfg
         return {
             "dim": cfg.dim, "heads": cfg.heads, "layers": cfg.layers,
+            "loop": cfg.loop,
             "context_len": cfg.context_len, "ffn_mult": cfg.ffn_mult,
             "dropout": cfg.dropout, "learning_rate": cfg.learning_rate,
             "seed": cfg.seed, "max_vocab": cfg.max_vocab,
@@ -949,6 +1008,7 @@ class TransformerLM:
             if (int(data.get("dim", cfg.dim)) != cfg.dim
                     or int(data.get("heads", cfg.heads)) != cfg.heads
                     or int(data.get("layers", cfg.layers)) != cfg.layers
+                    or int(data.get("loop", 1)) != cfg.loop
                     or int(data.get("context_len", cfg.context_len)) != cfg.context_len):
                 return False
             self._vocab = list(data["vocab"])

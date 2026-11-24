@@ -1,6 +1,7 @@
 """Tests for the transformer language model, the hybrid blend and the
 mind-level wiring (persistence included)."""
 import math
+from dataclasses import replace
 
 import pytest
 
@@ -228,3 +229,146 @@ def test_train_loop_stops_early_when_loss_stalls():
     assert report.epochs == 3                                # 1 progress epoch + 2 stagnant
     assert len(report.per_epoch_losses) == 3
     assert len(seen) == 3
+
+
+class TestValidationSplit:
+    """train_file(validation_split=...) — 80/20-style hold-out scored with
+    the SAME cross-entropy training minimizes, forward-only."""
+
+    def _mind(self) -> Mind:
+        from cognify.core.builder import MindBuilder
+        mind = MindBuilder("SplitTest").with_memory().with_thinking().build()
+        mind.neural_language_model = TransformerLM(tiny_config())
+        return mind
+
+    def _corpus_file(self, tmp_path):
+        path = tmp_path / "corpus.txt"
+        path.write_text("\n".join(CORPUS) + "\n", encoding="utf-8")
+        return str(path)
+
+    def test_split_trains_80_and_validates_20(self, tmp_path):
+        mind = self._mind()
+        path = self._corpus_file(tmp_path)
+        mind.train_file(path)                     # plain pass — still everything
+        mind.train_deep_model(5)
+
+        report = mind.train_file(path, 0.2, 42)
+        assert report.validation_split == 0.2
+        assert report.validation_lines == 1       # 6 lines * 0.2 = 1 (floor)
+        assert report.lines == 5                  # only the 80% trained
+        assert not math.isnan(report.validation_loss)
+        assert report.validation_words > 0
+        assert "Validation: 1 line(s) held out" in str(report)
+
+    def test_split_is_deterministic_for_a_seed(self, tmp_path):
+        mind = self._mind()
+        path = self._corpus_file(tmp_path)
+        mind.train_file(path)                     # fills the language buffer
+        mind.train_deep_model(5)
+        # Same seed → same held-out line → same token count and score.
+        first = mind.train_file(path, 0.5, 7)
+        second = mind.train_file(path, 0.5, 7)
+        assert first.validation_words == second.validation_words
+        assert first.validation_loss == second.validation_loss
+        # A different seed may hold out a different line (different tokens).
+        other = mind.train_file(path, 0.5, 9)
+        assert other.validation_words >= 0
+
+    def test_no_split_trains_everything(self, tmp_path):
+        mind = self._mind()
+        path = self._corpus_file(tmp_path)
+        report = mind.train_file(path)
+        assert report.lines == len(CORPUS)
+        assert report.validation_split == 0.0
+        assert report.validation_lines == 0
+        assert math.isnan(report.validation_loss)
+        assert "Validation" not in str(report)
+
+    def test_untrained_model_scores_nan(self, tmp_path):
+        mind = self._mind()
+        path = self._corpus_file(tmp_path)
+        report = mind.train_file(path, 0.2)       # no deep training yet
+        assert report.validation_lines == 1
+        assert math.isnan(report.validation_loss)
+        assert "no score" in str(report)
+
+    def test_evaluate_never_touches_the_weights(self, tmp_path):
+        lm = TransformerLM(tiny_config())
+        for line in CORPUS:
+            lm.observe(line)
+        lm.train(5)
+        snapshot = lm.to_dict()
+        loss, tokens = lm.evaluate(CORPUS)
+        assert not math.isnan(loss) and tokens > 0
+        # evaluate() leaves the buffer untouched: re-evaluating scores
+        # exactly the same number.
+        again, again_tokens = lm.evaluate(CORPUS)
+        assert again == loss and again_tokens == tokens
+
+
+class TestGenerationGuard:
+    """generate() ends sentences on EOS (like llama.cpp) and never repeats
+    a word three times in a row — the degenerate loop tiny models fall
+    into."""
+
+    def test_no_triple_repeats(self, trained):
+        for prompt in ("the cat", "the", "sat on the", "the dog"):
+            words = trained.generate(prompt, max_tokens=30).split()
+            for i in range(len(words) - 2):
+                assert not (words[i] == words[i + 1] == words[i + 2]), words
+
+    def test_can_end_before_max_tokens(self, trained):
+        # With EOS in the sampling distribution a trained model can finish
+        # a short sentence early — the reply is often shorter than the cap.
+        short_replies = 0
+        for _ in range(6):
+            words = trained.generate("the cat", max_tokens=24).split()
+            if len(words) < 24:
+                short_replies += 1
+        assert short_replies >= 1
+
+
+class TestLoopTransformer:
+    """Loop Transformer (cfg.loop): one block stack applied N times per
+    pass — weight-tied recurrent depth (Universal Transformer / ALBERT
+    style). Same parameters, deeper compute; the GGUF export unrolls the
+    loop into layers × loop physical blocks."""
+
+    def test_rejects_out_of_range(self):
+        with pytest.raises(ValueError):
+            TransformerLM(replace(tiny_config(), loop=0))
+        with pytest.raises(ValueError):
+            TransformerLM(replace(tiny_config(), loop=9))
+        assert TransformerLM().cfg.loop == 1   # classic default
+
+    def test_looping_adds_no_parameters_and_trains(self):
+        plain = TransformerLM(tiny_config())
+        looped = TransformerLM(replace(tiny_config(), loop=2))
+        for line in CORPUS:
+            plain.observe(line)
+            looped.observe(line)
+        p1, p2 = plain.train(20), looped.train(20)
+        assert p2.parameters == p1.parameters   # weight tying: same count
+        assert p2.final_loss < p2.initial_loss  # and looping learns
+        for word in looped.generate("the cat", 6).split():
+            assert "<" not in word
+
+    def test_roundtrip_keeps_loop(self):
+        looped = TransformerLM(replace(tiny_config(), loop=3))
+        for line in CORPUS:
+            looped.observe(line)
+        looped.train(10)
+        restored = TransformerLM(replace(tiny_config(), loop=3))
+        assert restored.load_dict(looped.to_dict())
+        assert restored.cfg.loop == 3
+        assert restored.is_trained
+        assert restored.generate("the cat", 6) != ""
+        # Architecture mismatch: a one-pass model refuses a looped snapshot.
+        assert not TransformerLM(tiny_config()).load_dict(looped.to_dict())
+
+    def test_builder_hook(self):
+        from cognify.core.builder import MindBuilder
+        mind = MindBuilder("Looped").with_transformer(
+            lambda c: replace(c, layers=1, loop=2)).build()
+        assert mind.neural_language_model.cfg.loop == 2
+        assert mind.neural_language_model.cfg.layers == 1

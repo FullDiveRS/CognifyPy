@@ -1,0 +1,20 @@
+
+
+<|system|>
+You are a friendly chatbot.</s>
+
+
+
+
+<|user|>
+Hello!</s>
+
+
+
+
+<|assistant|>
+Hi there!</s>
+
+
+<|assistant|>
+
